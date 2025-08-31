@@ -119,10 +119,10 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=settings.cors_methods,
-    allow_headers=settings.cors_headers,
+    allow_methods=settings.cors_methods_list,
+    allow_headers=settings.cors_headers_list,
     expose_headers=["X-Request-ID", "X-Process-Time"],
 )
 
@@ -138,6 +138,10 @@ app.include_router(
     prefix=settings.api_prefix,
     tags=["steganography"]
 )
+
+# Add direct route for convenience (without /api/v1 prefix)
+from app.api.v1.endpoints.embed import embed_data
+app.post("/embed", tags=["embed-direct"])(embed_data)
 
 
 # Health check endpoint

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test CORS for Tab Embed API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 CORS Test for Tab "Embed" API</h1>
+    
+    <div>
+        <h3>Test CORS với Frontend calls:</h3>
+        <button onclick="testWithFetch()">Test với Fetch API</button>
+        <button onclick="testWithAxios()">Test với Axios</button>
+        <button onclick="testPreflight()">Test Preflight (OPTIONS)</button>
+    </div>
+    
+    <div id="results"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        const resultsDiv = document.getElementById('results');
+
+        function addResult(title, content, isSuccess = true) {
+            const div = document.createElement('div');
+            div.className = `result ${isSuccess ? 'success' : 'error'}`;
+            div.innerHTML = `<h4>${title}</h4><pre>${content}</pre>`;
+            resultsDiv.appendChild(div);
+        }
+
+        function createTestImage() {
+            // Create a small test image blob
+            const canvas = document.createElement('canvas');
+            canvas.width = 50;
+            canvas.height = 50;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(0, 0, 50, 50);
+            ctx.fillStyle = 'white';
+            ctx.fillText('TEST', 10, 25);
+            
+            return new Promise(resolve => {
+                canvas.toBlob(resolve, 'image/png');
+            });
+        }
+
+        async function testWithFetch() {
+            try {
+                addResult('🔄 Testing with Fetch API...', 'Preparing test data...');
+                
+                const imageBlob = await createTestImage();
+                const formData = new FormData();
+                formData.append('coverImage', imageBlob, 'test.png');
+                formData.append('secretText', 'Hello from CORS test!');
+                formData.append('secretType', 'text');
+                formData.append('complexityMethod', 'sobel');
+                formData.append('payloadCap', '60');
+                formData.append('domain', 'spatial');
+
+                const response = await fetch(`${API_BASE}/embed`, {
+                    method: 'POST',
+                    body: formData,
+                    // Don't set Content-Type header for FormData - browser will set it with boundary
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult(
+                        '✅ Fetch API - SUCCESS', 
+                        `Status: ${response.status}
+CORS Headers:
+- Access-Control-Allow-Origin: ${response.headers.get('Access-Control-Allow-Origin')}
+- Access-Control-Allow-Methods: ${response.headers.get('Access-Control-Allow-Methods')}
+
+Response: ${JSON.stringify(data.message, null, 2)}
+PSNR: ${data.data?.metrics?.psnr}
+Processing Time: ${data.data?.metrics?.processingTime}ms`,
+                        true
+                    );
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                addResult('❌ Fetch API - ERROR', error.message, false);
+            }
+        }
+
+        async function testWithAxios() {
+            try {
+                addResult('🔄 Testing with Axios...', 'Preparing test data...');
+                
+                const imageBlob = await createTestImage();
+                const formData = new FormData();
+                formData.append('coverImage', imageBlob, 'test.png');
+                formData.append('secretText', 'Hello from Axios CORS test!');
+                formData.append('secretType', 'text');
+                formData.append('complexityMethod', 'laplacian');
+
+                const response = await axios.post(`${API_BASE}/embed`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    }
+                });
+
+                addResult(
+                    '✅ Axios - SUCCESS', 
+                    `Status: ${response.status}
+CORS Headers:
+- Access-Control-Allow-Origin: ${response.headers['access-control-allow-origin']}
+
+Response: ${JSON.stringify(response.data.message, null, 2)}
+SSIM: ${response.data.data?.metrics?.ssim}
+Processing Time: ${response.data.data?.metrics?.processingTime}ms`,
+                    true
+                );
+            } catch (error) {
+                addResult('❌ Axios - ERROR', `
+Error: ${error.message}
+Response: ${error.response?.data ? JSON.stringify(error.response.data, null, 2) : 'No response data'}
+Status: ${error.response?.status || 'No status'}`, false);
+            }
+        }
+
+        async function testPreflight() {
+            try {
+                addResult('🔄 Testing Preflight (OPTIONS)...', 'Sending OPTIONS request...');
+                
+                const response = await fetch(`${API_BASE}/embed`, {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': 'http://localhost:5173',
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type',
+                    }
+                });
+
+                addResult(
+                    '✅ Preflight - SUCCESS', 
+                    `Status: ${response.status}
+CORS Preflight Headers:
+- Access-Control-Allow-Origin: ${response.headers.get('Access-Control-Allow-Origin')}
+- Access-Control-Allow-Methods: ${response.headers.get('Access-Control-Allow-Methods')}
+- Access-Control-Allow-Headers: ${response.headers.get('Access-Control-Allow-Headers')}
+- Access-Control-Allow-Credentials: ${response.headers.get('Access-Control-Allow-Credentials')}`,
+                    true
+                );
+            } catch (error) {
+                addResult('❌ Preflight - ERROR', error.message, false);
+            }
+        }
+
+        // Auto-run tests on page load
+        window.onload = function() {
+            addResult('🚀 CORS Test Started', `Testing CORS for: ${API_BASE}
+Origin: ${window.location.origin}
+User Agent: ${navigator.userAgent}`);
+        };
+    </script>
+</body>
+</html>

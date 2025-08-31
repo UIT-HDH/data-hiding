@@ -1,13 +1,17 @@
 """
 API Router for version 1 of the Steganography API.
 
-This module handles all v1 API routes and endpoints.
+Focus: Tab "Embed" functionality only for academic project.
 """
 
 from fastapi import APIRouter
+from app.api.v1.endpoints import embed
 
 # Create the main API router for v1
 api_router = APIRouter()
+
+# Include only embed endpoint router for Tab "Embed" functionality
+api_router.include_router(embed.router, tags=["embed"])
 
 # Health check endpoint
 @api_router.get("/health")

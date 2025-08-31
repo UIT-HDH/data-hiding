@@ -147,25 +147,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             style={{ borderRight: 0 }}
           />
 
-          {/* Shortcuts section */}
-          {!sidebarCollapsed && (
-            <div
-              style={{
-                margin: 16,
-                padding: 8,
-                background: '#f0f0f0',
-                borderRadius: 4,
-                fontSize: 12,
-              }}
-            >
-              <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Phím tắt:</div>
-              <div>Ctrl+B: Mở/đóng menu</div>
-              <div>Ctrl+E: Thực hiện Nhúng</div>
-              <div>Ctrl+X: Thực hiện Giải</div>
-              <div>Ctrl+S: Tải/Save stego</div>
-              <div>Ctrl+P: Xem trước Overlay</div>
-            </div>
-          )}
         </Sider>
 
         <Layout>
