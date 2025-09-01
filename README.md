@@ -15,6 +15,13 @@
 - **Vite** - Build tool và dev server
 - **Axios** - HTTP client
 
+### Backend Stack
+- **FastAPI** - Web framework cho Python
+- **Uvicorn** - ASGI server
+- **Pillow (PIL)** - Xử lý ảnh
+- **NumPy** - Tính toán số học
+- **Python-multipart** - Xử lý file upload
+
 ### Styling & Theme
 - **Ant Design ConfigProvider** - Cấu hình theme tùy chỉnh
 - **CSS-in-JS** - Inline styles với Ant Design tokens
@@ -56,6 +63,328 @@
 - **BPP threshold**: Điều chỉnh ngưỡng bits per pixel (1-8)
 - **Curve Editor**: Placeholder cho fine-tuning
 - **Interactive preview**: Xem trước các map complexity
+
+## Cài đặt và chạy
+
+### Prerequisites
+
+#### Backend Requirements
+- **Python 3.9+** (khuyến nghị Python 3.11)
+- **pip** hoặc **conda** để quản lý packages
+- **pyenv** (tùy chọn) để quản lý Python versions
+
+#### Frontend Requirements
+- **Node.js 18+** (khuyến nghị Node.js 20)
+- **pnpm** (khuyến nghị) hoặc **npm**
+- **Git** để clone repository
+
+### Installation & Setup
+
+#### 1. Clone Repository
+```bash
+git clone <repository-url>
+cd data-hiding
+```
+
+#### 2. Backend Setup
+
+```bash
+# Di chuyển vào thư mục backend
+cd api
+
+# Tạo virtual environment (khuyến nghị)
+python3 -m venv venv
+
+# Kích hoạt virtual environment
+# Trên macOS/Linux:
+source venv/bin/activate
+# Trên Windows:
+# venv\Scripts\activate
+
+# Cài đặt dependencies
+pip install -r requirements.txt
+
+# Kiểm tra cài đặt
+python3 -c "import fastapi, uvicorn, PIL, numpy; print('✅ Backend dependencies installed successfully')"
+```
+
+#### 3. Frontend Setup
+
+```bash
+# Di chuyển vào thư mục frontend
+cd ../frontend
+
+# Cài đặt dependencies
+pnpm install
+# Hoặc nếu dùng npm:
+# npm install
+
+# Kiểm tra cài đặt
+pnpm list --depth=0
+```
+
+### Chạy Development Servers
+
+#### Option 1: Chạy riêng lẻ (Khuyến nghị cho development)
+
+##### Backend (Terminal 1)
+```bash
+cd api
+
+# Kích hoạt virtual environment nếu chưa kích hoạt
+source venv/bin/activate
+
+# Chạy simple backend (cho tính năng Embed chính)
+python3 simple_backend.py
+
+# Hoặc chạy với uvicorn
+uvicorn simple_backend:app --host 0.0.0.0 --port 8000 --reload
+
+# Backend sẽ chạy tại: http://localhost:8000
+# API Documentation: http://localhost:8000/docs
+```
+
+##### Frontend (Terminal 2)
+```bash
+cd frontend
+
+# Chạy development server
+pnpm dev
+# Hoặc nếu dùng npm:
+# npm run dev
+
+# Frontend sẽ chạy tại: http://localhost:5173
+```
+
+#### Option 2: Chạy bằng script tự động
+
+##### Backend System (Terminal 1)
+```bash
+cd api
+
+# Cấp quyền thực thi cho script
+chmod +x start_backend.sh
+
+# Chạy toàn bộ backend system
+./start_backend.sh
+
+# Các lệnh khác:
+./start_backend.sh status  # Kiểm tra trạng thái
+./start_backend.sh logs    # Xem logs
+./start_backend.sh stop    # Dừng tất cả services
+```
+
+##### Frontend (Terminal 2)
+```bash
+cd frontend
+pnpm dev
+```
+
+### Kiểm tra hệ thống
+
+#### 1. Kiểm tra Backend
+```bash
+# Kiểm tra health endpoint
+curl http://localhost:8000/health
+
+# Kiểm tra API documentation
+curl http://localhost:8000/docs
+```
+
+#### 2. Kiểm tra Frontend
+```bash
+# Mở browser và truy cập
+http://localhost:5173
+```
+
+#### 3. Test API Integration
+```bash
+# Test embed endpoint
+curl -X POST http://localhost:8000/embed \
+  -F "coverImage=@test_image.jpg" \
+  -F "secretText=Hello World"
+```
+
+### Troubleshooting
+
+#### Backend Issues
+
+**Lỗi: `ModuleNotFoundError: No module named 'fastapi'`**
+```bash
+# Giải pháp: Cài đặt lại dependencies
+cd api
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Lỗi: `Port 8000 is already in use`**
+```bash
+# Giải pháp: Tìm và kill process đang sử dụng port
+lsof -ti:8000 | xargs kill -9
+# Hoặc dùng script
+./start_backend.sh stop
+```
+
+**Lỗi: `Permission denied` khi chạy script**
+```bash
+# Giải pháp: Cấp quyền thực thi
+chmod +x start_backend.sh
+```
+
+#### Frontend Issues
+
+**Lỗi: `npm error Cannot read properties of null`**
+```bash
+# Giải pháp: Xóa node_modules và cài lại
+rm -rf node_modules package-lock.json
+pnpm install
+```
+
+**Lỗi: `UNMET DEPENDENCY recoil`**
+```bash
+# Giải pháp: Cài đặt recoil
+pnpm add recoil
+```
+
+**Lỗi: `Port 5173 is already in use`**
+```bash
+# Giải pháp: Kill process hoặc dùng port khác
+lsof -ti:5173 | xargs kill -9
+# Hoặc
+pnpm dev --port 3000
+```
+
+#### CORS Issues
+
+**Lỗi: `Access to XMLHttpRequest blocked by CORS policy`**
+```bash
+# Giải pháp: Kiểm tra CORS configuration trong backend
+# Đảm bảo frontend URL được thêm vào cors_origins
+```
+
+### Production Deployment
+
+#### Backend Production
+```bash
+cd api
+
+# Build và chạy production server
+uvicorn simple_backend:app --host 0.0.0.0 --port 8000 --workers 4
+```
+
+#### Frontend Production
+```bash
+cd frontend
+
+# Build production bundle
+pnpm build
+
+# Serve static files
+pnpm preview
+# Hoặc dùng nginx/apache để serve dist/ folder
+```
+
+### Environment Configuration
+
+#### Backend Environment
+Tạo file `.env` trong thư mục `api/`:
+```bash
+# API Configuration
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+API_HOST=0.0.0.0
+API_PORT=8000
+
+# Development Settings
+DEBUG=true
+LOG_LEVEL=INFO
+```
+
+#### Frontend Environment
+Tạo file `.env` trong thư mục `frontend/`:
+```bash
+# API Configuration
+VITE_API_BASE_URL=http://localhost:8000
+
+# Development Settings  
+VITE_MAX_FILE_SIZE=10485760  # 10MB in bytes
+VITE_MAX_BATCH_FILES=10
+VITE_UPLOAD_TIMEOUT=30000    # 30 seconds
+```
+
+### Development Workflow
+
+#### 1. Development Mode
+```bash
+# Terminal 1: Backend
+cd api && source venv/bin/activate && python3 simple_backend.py
+
+# Terminal 2: Frontend  
+cd frontend && pnpm dev
+
+# Terminal 3: Logs monitoring
+cd api && tail -f simple_backend.log
+```
+
+#### 2. Testing
+```bash
+# Test backend
+cd api && python3 test_simple_backend.py
+
+# Test frontend
+cd frontend && pnpm run lint
+```
+
+#### 3. Debug Mode
+```bash
+# Backend với debug logging
+cd api && python3 -u simple_backend.py
+
+# Frontend với dev tools
+cd frontend && pnpm dev --debug
+```
+
+### File Structure
+```
+data-hiding/
+├── api/                          # Backend
+│   ├── simple_backend.py         # Main backend server
+│   ├── requirements.txt          # Python dependencies
+│   ├── start_backend.sh          # Startup script
+│   ├── test_simple_backend.py    # Backend tests
+│   └── venv/                     # Virtual environment
+├── frontend/                     # Frontend
+│   ├── src/
+│   │   ├── routes/
+│   │   │   └── EmbedPage.tsx     # Main embed page
+│   │   └── services/
+│   │       └── http.ts           # HTTP client
+│   ├── package.json              # Node dependencies
+│   └── dist/                     # Build output
+└── README.md                     # This file
+```
+
+### Quick Start Commands
+
+```bash
+# Clone và setup toàn bộ project
+git clone <repository-url> && cd data-hiding
+
+# Setup backend
+cd api && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt
+
+# Setup frontend  
+cd ../frontend && pnpm install
+
+# Chạy development servers
+# Terminal 1: cd api && source venv/bin/activate && python3 simple_backend.py
+# Terminal 2: cd frontend && pnpm dev
+
+# Truy cập ứng dụng
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8000
+```
+
+---
 
 ## Giao diện người dùng
 
@@ -126,34 +455,6 @@ export const http = axios.create({
   },
 });
 ```
-
-## Cài đặt và chạy
-
-### Prerequisites
-- Node.js 18+ 
-- pnpm (khuyến nghị) hoặc npm
-
-### Installation
-```bash
-# Clone repository
-git clone <repository-url>
-cd adaptive-stego-frontend
-
-# Install dependencies  
-pnpm install
-
-# Start development server
-pnpm dev
-
-# Build for production
-pnpm build
-```
-
-### Development Server
-```bash
-pnpm dev
-```
-Ứng dụng sẽ chạy tại `http://localhost:5173` (hoặc port khác nếu 5173 đã sử dụng)
 
 ## Cấu trúc dự án
 
