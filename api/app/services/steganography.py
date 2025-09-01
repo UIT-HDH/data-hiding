@@ -1,696 +1,469 @@
 """
-Core steganography service implementation.
+Core steganography service implementation - Academic Version.
 
-This module provides the main steganography operations including:
-- Data embedding using various algorithms
-- Data extraction with integrity verification
-- Algorithm-specific implementations
-- Security and encryption features
-- Quality metrics and analysis
+Đồ án môn học: Data Hiding với Adaptive LSB Steganography
+Thuật toán: Sobel Edge Detection + Adaptive LSB (1-2 bit)
+
+This module provides:
+- Sobel edge detection for complexity analysis  
+- Adaptive LSB embedding (1-bit for smooth, 2-bit for complex areas)
+- Text-to-binary conversion with proper formatting
+- Quality metrics (PSNR, SSIM)
 """
 
 import io
 import base64
-import hashlib
-import gzip
-import lzma
-import bz2
-import secrets
+import struct
 import numpy as np
-from typing import Dict, Any, Optional, Tuple, List
-from PIL import Image, ImageFilter
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-
-from app.models.requests import (
-    AlgorithmType, ColorChannel, CompressionType, EncryptionType,
-    EmbeddingParameters, ExtractionParameters
-)
-from app.models.responses import (
-    EmbeddingMetrics, ExtractionMetrics, DataType, ExtractedData
-)
-from app.core.exceptions import (
-    EmbeddingError, ExtractionError, PayloadTooLargeError,
-    ProcessingError, ParameterError
-)
-from app.core.logging import get_logger
-
-logger = get_logger(__name__)
+from typing import Dict, Any, Optional, Tuple
+from PIL import Image
 
 
 class SteganographyService:
     """
-    Main service class for steganography operations.
-    
-    Provides high-level interface for embedding and extracting data
-    from images using various steganographic algorithms with security
-    features and quality metrics.
+    Main steganography service class providing embedding and extraction operations.
     """
     
     def __init__(self):
         """Initialize the steganography service."""
-        self.supported_formats = {"PNG", "JPEG", "BMP", "TIFF", "WEBP"}
-        self.algorithms = {
-            AlgorithmType.LSB: self._lsb_embed,
-            AlgorithmType.LSB_ENHANCED: self._lsb_enhanced_embed,
-            AlgorithmType.DCT: self._dct_embed,
-            AlgorithmType.DWT: self._dwt_embed,
-            AlgorithmType.PVD: self._pvd_embed,
-            AlgorithmType.EDGE_ADAPTIVE: self._edge_adaptive_embed,
-        }
-        
-        self.extraction_algorithms = {
-            AlgorithmType.LSB: self._lsb_extract,
-            AlgorithmType.LSB_ENHANCED: self._lsb_enhanced_extract,
-            AlgorithmType.DCT: self._dct_extract,
-            AlgorithmType.DWT: self._dwt_extract,
-            AlgorithmType.PVD: self._pvd_extract,
-            AlgorithmType.EDGE_ADAPTIVE: self._edge_adaptive_extract,
-        }
+        pass
     
-    async def embed_data(
-        self,
-        cover_image_data: str,
-        secret_data: str,
-        parameters: EmbeddingParameters,
-        is_binary: bool = False,
-        compression: CompressionType = CompressionType.NONE,
-        encryption: EncryptionType = EncryptionType.NONE,
-        password: Optional[str] = None
-    ) -> Tuple[str, EmbeddingMetrics, List[str]]:
+    def sobel_edge_detection(self, image_array: np.ndarray) -> np.ndarray:
         """
-        Embed secret data into cover image.
+        Phân tích độ phức tạp ảnh bằng Sobel Edge Detection
         
         Args:
-            cover_image_data: Base64 encoded cover image
-            secret_data: Secret data to embed
-            parameters: Embedding parameters
-            is_binary: Whether secret data is binary
-            compression: Compression method
-            encryption: Encryption method
-            password: Encryption password
+            image_array: RGB image array (H, W, 3)
             
         Returns:
-            Tuple of (stego_image_base64, metrics, log_entries)
+            complexity_map: Grayscale complexity map (H, W) - giá trị 0-255
         """
-        log_entries = []
-        
-        try:
-            # Decode cover image
-            log_entries.append("Decoding cover image")
-            cover_image = self._decode_image(cover_image_data)
-            original_format = cover_image.format
-            log_entries.append(f"Cover image format: {original_format}, Size: {cover_image.size}")
-            
-            # Prepare secret data
-            log_entries.append("Preparing secret data for embedding")
-            processed_data, data_info = self._prepare_secret_data(
-                secret_data, is_binary, compression, encryption, password
-            )
-            log_entries.extend(data_info["log_entries"])
-            
-            # Check capacity
-            log_entries.append("Checking embedding capacity")
-            capacity = self._calculate_capacity(cover_image, parameters)
-            payload_size = len(processed_data)
-            
-            if parameters.capacity_check and payload_size > capacity:
-                raise PayloadTooLargeError(
-                    payload_size=payload_size,
-                    capacity=capacity,
-                    details={
-                        "algorithm": parameters.algorithm,
-                        "image_size": cover_image.size
-                    }
-                )
-            
-            log_entries.append(f"Capacity: {capacity} bytes, Payload: {payload_size} bytes")
-            
-            # Perform embedding
-            log_entries.append(f"Starting {parameters.algorithm} embedding")
-            algorithm_func = self.algorithms.get(parameters.algorithm)
-            if not algorithm_func:
-                raise ParameterError(
-                    parameter="algorithm",
-                    message=f"Unsupported algorithm: {parameters.algorithm}"
-                )
-            
-            # Convert to RGB if necessary for algorithm
-            if cover_image.mode not in ("RGB", "RGBA"):
-                cover_image = cover_image.convert("RGB")
-                log_entries.append(f"Converted image to RGB mode")
-            
-            stego_image = algorithm_func(cover_image, processed_data, parameters)
-            log_entries.append("Embedding completed successfully")
-            
-            # Calculate metrics
-            log_entries.append("Calculating embedding metrics")
-            metrics = self._calculate_embedding_metrics(
-                cover_image, stego_image, processed_data, capacity, parameters
-            )
-            
-            # Encode result
-            stego_base64 = self._encode_image(stego_image, original_format, parameters.quality)
-            log_entries.append("Stego image encoded successfully")
-            
-            return stego_base64, metrics, log_entries
-            
-        except Exception as e:
-            error_msg = f"Embedding failed: {str(e)}"
-            log_entries.append(error_msg)
-            logger.error(error_msg, exc_info=True)
-            
-            if isinstance(e, (EmbeddingError, PayloadTooLargeError, ParameterError)):
-                raise
-            else:
-                raise EmbeddingError(message=error_msg) from e
-    
-    async def extract_data(
-        self,
-        stego_image_data: str,
-        parameters: ExtractionParameters
-    ) -> Tuple[Optional[ExtractedData], ExtractionMetrics, List[str]]:
-        """
-        Extract secret data from steganography image.
-        
-        Args:
-            stego_image_data: Base64 encoded stego image
-            parameters: Extraction parameters
-            
-        Returns:
-            Tuple of (extracted_data, metrics, log_entries)
-        """
-        log_entries = []
-        
-        try:
-            # Decode stego image
-            log_entries.append("Decoding steganography image")
-            stego_image = self._decode_image(stego_image_data)
-            log_entries.append(f"Stego image format: {stego_image.format}, Size: {stego_image.size}")
-            
-            # Perform extraction
-            log_entries.append(f"Starting {parameters.algorithm} extraction")
-            algorithm_func = self.extraction_algorithms.get(parameters.algorithm)
-            if not algorithm_func:
-                raise ParameterError(
-                    parameter="algorithm",
-                    message=f"Unsupported algorithm: {parameters.algorithm}"
-                )
-            
-            # Convert to RGB if necessary
-            if stego_image.mode not in ("RGB", "RGBA"):
-                stego_image = stego_image.convert("RGB")
-                log_entries.append("Converted image to RGB mode")
-            
-            raw_data = algorithm_func(stego_image, parameters)
-            
-            if not raw_data:
-                log_entries.append("No hidden data found in image")
-                return None, self._create_failed_extraction_metrics(), log_entries
-            
-            log_entries.append(f"Extracted {len(raw_data)} bytes of raw data")
-            
-            # Process extracted data
-            log_entries.append("Processing extracted data")
-            extracted_data, processing_info = self._process_extracted_data(
-                raw_data, parameters.password
-            )
-            log_entries.extend(processing_info["log_entries"])
-            
-            # Calculate metrics
-            log_entries.append("Calculating extraction metrics")
-            metrics = self._calculate_extraction_metrics(
-                raw_data, extracted_data, processing_info, parameters
-            )
-            
-            log_entries.append("Extraction completed successfully")
-            return extracted_data, metrics, log_entries
-            
-        except Exception as e:
-            error_msg = f"Extraction failed: {str(e)}"
-            log_entries.append(error_msg)
-            logger.error(error_msg, exc_info=True)
-            
-            if isinstance(e, (ExtractionError, ParameterError)):
-                raise
-            else:
-                raise ExtractionError(message=error_msg) from e
-    
-    # Helper methods
-    
-    def _decode_image(self, base64_data: str) -> Image.Image:
-        """Decode base64 image data."""
-        try:
-            image_data = base64.b64decode(base64_data)
-            image = Image.open(io.BytesIO(image_data))
-            return image
-        except Exception as e:
-            raise ProcessingError(f"Failed to decode image: {str(e)}")
-    
-    def _encode_image(self, image: Image.Image, format: str, quality: int = 95) -> str:
-        """Encode image to base64."""
-        try:
-            buffer = io.BytesIO()
-            
-            # Handle format-specific options
-            save_kwargs = {}
-            if format.upper() == "JPEG":
-                save_kwargs["quality"] = quality
-                save_kwargs["optimize"] = True
-                # Convert RGBA to RGB for JPEG
-                if image.mode == "RGBA":
-                    image = image.convert("RGB")
-            elif format.upper() == "PNG":
-                save_kwargs["optimize"] = True
-            
-            image.save(buffer, format=format, **save_kwargs)
-            image_data = buffer.getvalue()
-            return base64.b64encode(image_data).decode('utf-8')
-        except Exception as e:
-            raise ProcessingError(f"Failed to encode image: {str(e)}")
-    
-    def _prepare_secret_data(
-        self,
-        data: str,
-        is_binary: bool,
-        compression: CompressionType,
-        encryption: EncryptionType,
-        password: Optional[str] = None
-    ) -> Tuple[bytes, Dict[str, Any]]:
-        """Prepare secret data for embedding."""
-        log_entries = []
-        
-        try:
-            # Convert to bytes
-            if is_binary:
-                raw_data = base64.b64decode(data)
-                log_entries.append("Decoded binary data from base64")
-            else:
-                raw_data = data.encode('utf-8')
-                log_entries.append("Encoded text data to UTF-8")
-            
-            original_size = len(raw_data)
-            
-            # Apply compression
-            if compression != CompressionType.NONE:
-                if compression == CompressionType.GZIP:
-                    raw_data = gzip.compress(raw_data)
-                elif compression == CompressionType.LZMA:
-                    raw_data = lzma.compress(raw_data)
-                elif compression == CompressionType.BZIP2:
-                    raw_data = bz2.compress(raw_data)
-                
-                compressed_size = len(raw_data)
-                compression_ratio = original_size / compressed_size if compressed_size > 0 else 1.0
-                log_entries.append(
-                    f"Applied {compression} compression: {original_size} → {compressed_size} bytes "
-                    f"(ratio: {compression_ratio:.2f})"
-                )
-            
-            # Apply encryption
-            if encryption != EncryptionType.NONE and password:
-                if encryption == EncryptionType.FERNET:
-                    # Generate key from password
-                    kdf = PBKDF2HMAC(
-                        algorithm=hashes.SHA256(),
-                        length=32,
-                        salt=b'steganography_salt',  # In production, use random salt
-                        iterations=100000,
-                    )
-                    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-                    f = Fernet(key)
-                    raw_data = f.encrypt(raw_data)
-                    log_entries.append("Applied Fernet encryption")
-                else:
-                    log_entries.append(f"Encryption {encryption} not implemented, skipping")
-            
-            # Add header with metadata
-            header = {
-                'is_binary': is_binary,
-                'compression': compression.value if compression else 'none',
-                'encryption': encryption.value if encryption else 'none',
-                'checksum': hashlib.sha256(raw_data).hexdigest()[:16],
-                'size': len(raw_data)
-            }
-            
-            # Serialize header
-            header_bytes = str(header).encode('utf-8')
-            header_length = len(header_bytes).to_bytes(4, 'big')
-            
-            # Combine header and data
-            final_data = header_length + header_bytes + raw_data
-            log_entries.append(f"Added metadata header: {len(header_bytes)} bytes")
-            log_entries.append(f"Final payload size: {len(final_data)} bytes")
-            
-            return final_data, {
-                "log_entries": log_entries,
-                "original_size": original_size,
-                "final_size": len(final_data),
-                "compression": compression,
-                "encryption": encryption
-            }
-            
-        except Exception as e:
-            raise ProcessingError(f"Failed to prepare secret data: {str(e)}")
-    
-    def _process_extracted_data(
-        self,
-        raw_data: bytes,
-        password: Optional[str] = None
-    ) -> Tuple[ExtractedData, Dict[str, Any]]:
-        """Process extracted raw data."""
-        log_entries = []
-        
-        try:
-            # Extract header
-            if len(raw_data) < 4:
-                raise ExtractionError("Insufficient data for header")
-            
-            header_length = int.from_bytes(raw_data[:4], 'big')
-            
-            if len(raw_data) < 4 + header_length:
-                raise ExtractionError("Corrupted header data")
-            
-            header_bytes = raw_data[4:4 + header_length]
-            payload_data = raw_data[4 + header_length:]
-            
-            # Parse header
-            try:
-                header = eval(header_bytes.decode('utf-8'))  # In production, use safe parsing
-                log_entries.append("Extracted metadata header")
-            except Exception:
-                raise ExtractionError("Failed to parse metadata header")
-            
-            # Verify checksum
-            expected_checksum = header.get('checksum', '')
-            actual_checksum = hashlib.sha256(payload_data).hexdigest()[:16]
-            checksum_valid = expected_checksum == actual_checksum
-            log_entries.append(f"Checksum validation: {'passed' if checksum_valid else 'failed'}")
-            
-            # Decrypt if needed
-            encryption = header.get('encryption', 'none')
-            if encryption != 'none' and password:
-                if encryption == 'fernet':
-                    try:
-                        kdf = PBKDF2HMAC(
-                            algorithm=hashes.SHA256(),
-                            length=32,
-                            salt=b'steganography_salt',
-                            iterations=100000,
-                        )
-                        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-                        f = Fernet(key)
-                        payload_data = f.decrypt(payload_data)
-                        log_entries.append("Successfully decrypted data")
-                    except Exception:
-                        raise ExtractionError("Failed to decrypt data - invalid password?")
-                else:
-                    log_entries.append(f"Decryption {encryption} not implemented")
-            
-            # Decompress if needed
-            compression = header.get('compression', 'none')
-            if compression != 'none':
-                try:
-                    if compression == 'gzip':
-                        payload_data = gzip.decompress(payload_data)
-                    elif compression == 'lzma':
-                        payload_data = lzma.decompress(payload_data)
-                    elif compression == 'bzip2':
-                        payload_data = bz2.decompress(payload_data)
-                    log_entries.append(f"Successfully decompressed data using {compression}")
-                except Exception:
-                    raise ExtractionError(f"Failed to decompress data using {compression}")
-            
-            # Determine data type and prepare output
-            is_binary = header.get('is_binary', False)
-            
-            if is_binary:
-                content = base64.b64encode(payload_data).decode('utf-8')
-                data_type = self._detect_data_type(payload_data)
-            else:
-                content = payload_data.decode('utf-8')
-                data_type = DataType.TEXT
-            
-            extracted_data = ExtractedData(
-                content=content,
-                data_type=data_type,
-                is_binary=is_binary,
-                size=len(payload_data),
-                checksum=actual_checksum,
-                compression_used=compression if compression != 'none' else None,
-                encryption_used=encryption if encryption != 'none' else None
-            )
-            
-            log_entries.append(f"Processed data: type={data_type}, size={len(payload_data)} bytes")
-            
-            return extracted_data, {
-                "log_entries": log_entries,
-                "checksum_valid": checksum_valid,
-                "header": header,
-                "data_type": data_type
-            }
-            
-        except ExtractionError:
-            raise
-        except Exception as e:
-            raise ExtractionError(f"Failed to process extracted data: {str(e)}")
-    
-    def _detect_data_type(self, data: bytes) -> DataType:
-        """Detect the type of binary data."""
-        if len(data) < 4:
-            return DataType.UNKNOWN
-        
-        # Check common file signatures
-        signatures = {
-            b'\x89PNG': DataType.IMAGE,
-            b'\xFF\xD8\xFF': DataType.IMAGE,
-            b'%PDF': DataType.DOCUMENT,
-            b'PK\x03\x04': DataType.DOCUMENT,  # ZIP/Office docs
-        }
-        
-        for sig, data_type in signatures.items():
-            if data.startswith(sig):
-                return data_type
-        
-        # Check if it's text
-        try:
-            data.decode('utf-8')
-            return DataType.TEXT
-        except UnicodeDecodeError:
-            pass
-        
-        return DataType.BINARY
-    
-    def _calculate_capacity(self, image: Image.Image, parameters: EmbeddingParameters) -> int:
-        """Calculate embedding capacity for the image."""
-        width, height = image.size
-        
-        if parameters.algorithm == AlgorithmType.LSB:
-            # LSB capacity: bits_per_pixel * num_pixels * channels / 8
-            channels = len(image.getbands())
-            bits_per_pixel = parameters.lsb_bits
-            total_bits = width * height * channels * bits_per_pixel
-            return total_bits // 8
-        
-        elif parameters.algorithm == AlgorithmType.LSB_ENHANCED:
-            # Enhanced LSB with some overhead
-            channels = len(image.getbands())
-            bits_per_pixel = parameters.lsb_bits
-            total_bits = width * height * channels * bits_per_pixel
-            return int(total_bits * 0.8) // 8  # 20% overhead for error correction
-        
-        # For other algorithms, provide conservative estimates
-        return width * height // 8  # Conservative estimate
-    
-    # Algorithm implementations (simplified for example)
-    
-    def _lsb_embed(self, image: Image.Image, data: bytes, params: EmbeddingParameters) -> Image.Image:
-        """LSB steganography embedding."""
-        img_array = np.array(image)
-        flat_img = img_array.flatten()
-        
-        # Convert data to binary
-        binary_data = ''.join(format(byte, '08b') for byte in data)
-        binary_data += '1111111111111110'  # End marker
-        
-        if len(binary_data) > len(flat_img):
-            raise PayloadTooLargeError(len(data), len(flat_img) // 8)
-        
-        # Embed data
-        for i, bit in enumerate(binary_data):
-            flat_img[i] = (flat_img[i] & 0xFE) | int(bit)
-        
-        # Reshape back
-        stego_array = flat_img.reshape(img_array.shape)
-        return Image.fromarray(stego_array.astype(np.uint8))
-    
-    def _lsb_extract(self, image: Image.Image, params: ExtractionParameters) -> Optional[bytes]:
-        """LSB steganography extraction."""
-        img_array = np.array(image)
-        flat_img = img_array.flatten()
-        
-        # Extract binary data
-        binary_data = ''
-        end_marker = '1111111111111110'
-        
-        for pixel in flat_img:
-            binary_data += str(pixel & 1)
-            
-            # Check for end marker
-            if binary_data.endswith(end_marker):
-                binary_data = binary_data[:-len(end_marker)]
-                break
-        
-        if not binary_data or len(binary_data) % 8 != 0:
-            return None
-        
-        # Convert binary to bytes
-        try:
-            data = bytes(int(binary_data[i:i+8], 2) for i in range(0, len(binary_data), 8))
-            return data
-        except ValueError:
-            return None
-    
-    # Placeholder implementations for other algorithms
-    
-    def _lsb_enhanced_embed(self, image: Image.Image, data: bytes, params: EmbeddingParameters) -> Image.Image:
-        """Enhanced LSB with error correction."""
-        # This would include error correction codes and better distribution
-        return self._lsb_embed(image, data, params)
-    
-    def _lsb_enhanced_extract(self, image: Image.Image, params: ExtractionParameters) -> Optional[bytes]:
-        """Enhanced LSB extraction with error correction."""
-        return self._lsb_extract(image, params)
-    
-    def _dct_embed(self, image: Image.Image, data: bytes, params: EmbeddingParameters) -> Image.Image:
-        """DCT-based embedding (placeholder)."""
-        # Would implement DCT-based steganography
-        return self._lsb_embed(image, data, params)
-    
-    def _dct_extract(self, image: Image.Image, params: ExtractionParameters) -> Optional[bytes]:
-        """DCT-based extraction (placeholder)."""
-        return self._lsb_extract(image, params)
-    
-    def _dwt_embed(self, image: Image.Image, data: bytes, params: EmbeddingParameters) -> Image.Image:
-        """DWT-based embedding (placeholder)."""
-        return self._lsb_embed(image, data, params)
-    
-    def _dwt_extract(self, image: Image.Image, params: ExtractionParameters) -> Optional[bytes]:
-        """DWT-based extraction (placeholder)."""
-        return self._lsb_extract(image, params)
-    
-    def _pvd_embed(self, image: Image.Image, data: bytes, params: EmbeddingParameters) -> Image.Image:
-        """PVD-based embedding (placeholder)."""
-        return self._lsb_embed(image, data, params)
-    
-    def _pvd_extract(self, image: Image.Image, params: ExtractionParameters) -> Optional[bytes]:
-        """PVD-based extraction (placeholder)."""
-        return self._lsb_extract(image, params)
-    
-    def _edge_adaptive_embed(self, image: Image.Image, data: bytes, params: EmbeddingParameters) -> Image.Image:
-        """Edge-adaptive embedding (placeholder)."""
-        return self._lsb_embed(image, data, params)
-    
-    def _edge_adaptive_extract(self, image: Image.Image, params: ExtractionParameters) -> Optional[bytes]:
-        """Edge-adaptive extraction (placeholder)."""
-        return self._lsb_extract(image, params)
-    
-    # Metrics calculation
-    
-    def _calculate_embedding_metrics(
-        self,
-        cover_image: Image.Image,
-        stego_image: Image.Image,
-        data: bytes,
-        capacity: int,
-        params: EmbeddingParameters
-    ) -> EmbeddingMetrics:
-        """Calculate embedding quality metrics."""
-        
-        # Basic metrics
-        cover_array = np.array(cover_image)
-        stego_array = np.array(stego_image)
-        
-        # Calculate PSNR and MSE
-        mse = np.mean((cover_array - stego_array) ** 2)
-        if mse == 0:
-            psnr = 100.0  # Perfect quality
+        # Chuyển RGB thành Grayscale
+        if len(image_array.shape) == 3:
+            gray = np.dot(image_array[...,:3], [0.299, 0.587, 0.114])
         else:
-            psnr = 20 * np.log10(255.0 / np.sqrt(mse))
+            gray = image_array.copy()
         
-        # Calculate SSIM (simplified)
-        ssim = self._calculate_ssim(cover_array, stego_array)
+        # Sobel kernels (3x3)
+        sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+        sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
         
-        return EmbeddingMetrics(
-            original_size=len(self._encode_image(cover_image, "PNG")) // 4 * 3,  # Approximate
-            stego_size=len(self._encode_image(stego_image, "PNG")) // 4 * 3,
-            payload_size=len(data),
-            capacity_used=(len(data) / capacity) * 100,
-            total_capacity=capacity,
-            compression_ratio=1.0,  # Would calculate based on actual compression
-            quality_score=min(100, psnr * 2),  # Simplified quality score
-            psnr=psnr,
-            mse=mse,
-            ssim=ssim,
-            histogram_similarity=0.95  # Placeholder
-        )
-    
-    def _calculate_extraction_metrics(
-        self,
-        raw_data: bytes,
-        extracted_data: ExtractedData,
-        processing_info: Dict[str, Any],
-        params: ExtractionParameters
-    ) -> ExtractionMetrics:
-        """Calculate extraction quality metrics."""
+        # Áp dụng convolution
+        h, w = gray.shape
+        grad_x = np.zeros_like(gray, dtype=np.float32)
+        grad_y = np.zeros_like(gray, dtype=np.float32)
         
-        return ExtractionMetrics(
-            extracted_size=len(raw_data),
-            confidence_score=0.95 if processing_info.get("checksum_valid", False) else 0.7,
-            integrity_verified=processing_info.get("checksum_valid", False),
-            checksum_valid=processing_info.get("checksum_valid", False),
-            data_type=processing_info.get("data_type", DataType.UNKNOWN),
-            compression_detected=extracted_data.compression_used,
-            encryption_detected=extracted_data.encryption_used,
-            error_correction_used=False,
-            bit_error_rate=0.001 if processing_info.get("checksum_valid", False) else 0.05
-        )
-    
-    def _create_failed_extraction_metrics(self) -> ExtractionMetrics:
-        """Create metrics for failed extraction."""
-        return ExtractionMetrics(
-            extracted_size=0,
-            confidence_score=0.0,
-            integrity_verified=False,
-            data_type=DataType.UNKNOWN,
-            error_correction_used=False
-        )
-    
-    def _calculate_ssim(self, img1: np.ndarray, img2: np.ndarray) -> float:
-        """Calculate SSIM (simplified implementation)."""
-        if img1.shape != img2.shape:
-            return 0.0
+        # Manual convolution với padding
+        padded = np.pad(gray, ((1, 1), (1, 1)), mode='edge')
         
-        # Convert to grayscale if needed
-        if len(img1.shape) == 3:
-            img1 = np.mean(img1, axis=2)
-            img2 = np.mean(img2, axis=2)
+        for i in range(h):
+            for j in range(w):
+                region = padded[i:i+3, j:j+3]
+                grad_x[i, j] = np.sum(region * sobel_x)
+                grad_y[i, j] = np.sum(region * sobel_y)
         
-        # Calculate means
-        mu1 = np.mean(img1)
-        mu2 = np.mean(img2)
+        # Tính gradient magnitude
+        magnitude = np.sqrt(grad_x**2 + grad_y**2)
         
-        # Calculate variances and covariance
-        var1 = np.var(img1)
-        var2 = np.var(img2)
-        cov12 = np.mean((img1 - mu1) * (img2 - mu2))
+        # Normalize về 0-255
+        if magnitude.max() > 0:
+            magnitude = (magnitude / magnitude.max()) * 255
         
-        # SSIM constants
+        return magnitude.astype(np.uint8)
+
+    def text_to_binary(self, text: str) -> str:
+        """Chuyển text thành chuỗi binary với format: [32-bit length][UTF-8 bytes][delimiter]"""
+        if not text:
+            return ""
+        
+        text_bytes = text.encode('utf-8')
+        length = len(text_bytes)
+        header = struct.pack('>I', length)
+        full_data = header + text_bytes + b'\xFF'
+        binary = ''.join(format(byte, '08b') for byte in full_data)
+        
+        return binary
+
+    def binary_to_text(self, binary_string: str) -> str:
+        """Chuyển chuỗi binary thành text"""
+        if not binary_string or len(binary_string) < 32:
+            return ""
+        
+        try:
+            # Đọc 32-bit length header
+            length_bits = binary_string[:32]
+            length_bytes = bytes(int(length_bits[i:i+8], 2) for i in range(0, 32, 8))
+            length = struct.unpack('>I', length_bytes)[0]
+            
+            if length <= 0 or length > 10000:
+                return ""
+            
+            # Đọc data
+            data_start = 32
+            data_end = data_start + (length * 8)
+            
+            if data_end > len(binary_string):
+                return ""
+            
+            data_bits = binary_string[data_start:data_end]
+            data_bytes = bytes(int(data_bits[i:i+8], 2) for i in range(0, len(data_bits), 8))
+            text = data_bytes.decode('utf-8', errors='ignore')
+            return text
+            
+        except Exception:
+            return ""
+
+    def adaptive_lsb_embed(self, cover_image: np.ndarray, binary_data: str) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """Thực hiện Adaptive LSB embedding"""
+        h, w, c = cover_image.shape
+        
+        # Tính complexity map
+        complexity_map = self.sobel_edge_detection(cover_image)
+        
+        # Chia thành blocks 2x2
+        block_h, block_w = h // 2, w // 2
+        block_complexity = np.zeros((block_h, block_w))
+        
+        for i in range(block_h):
+            for j in range(block_w):
+                block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
+                block_complexity[i, j] = np.mean(block_region)
+        
+        # Xác định threshold
+        complexity_threshold = np.mean(block_complexity)
+        
+        # Tạo embedding mask
+        embedding_mask = np.zeros((h, w), dtype=np.uint8)
+        total_capacity = 0
+        
+        for i in range(block_h):
+            for j in range(block_w):
+                bits_per_pixel = 2 if block_complexity[i, j] > complexity_threshold else 1
+                embedding_mask[i*2:(i+1)*2, j*2:(j+1)*2] = bits_per_pixel
+                total_capacity += bits_per_pixel * 4
+        
+        # Kiểm tra capacity
+        if len(binary_data) > total_capacity:
+            raise ValueError(f"Payload too large: {len(binary_data)} > {total_capacity}")
+        
+        # Thực hiện embedding
+        stego_image = cover_image.copy()
+        data_index = 0
+        
+        for i in range(h):
+            for j in range(w):
+                if data_index >= len(binary_data):
+                    break
+                    
+                bits_to_embed = embedding_mask[i, j]
+                if bits_to_embed == 0:
+                    continue
+                
+                # Lấy bits
+                if data_index + bits_to_embed <= len(binary_data):
+                    data_bits = binary_data[data_index:data_index + bits_to_embed]
+                    data_index += bits_to_embed
+                else:
+                    remaining = len(binary_data) - data_index
+                    data_bits = binary_data[data_index:] + '0' * (bits_to_embed - remaining)
+                    data_index = len(binary_data)
+                
+                # Embed vào blue channel
+                blue_value = stego_image[i, j, 2]
+                
+                if bits_to_embed == 1:
+                    new_blue = (blue_value & 0xFE) | int(data_bits[0])
+                else:
+                    new_blue = (blue_value & 0xFC) | int(data_bits, 2)
+                
+                stego_image[i, j, 2] = new_blue
+        
+        metadata = {
+            'total_capacity': total_capacity,
+            'data_embedded': len(binary_data),
+            'utilization': (len(binary_data) / total_capacity) * 100,
+            'complexity_threshold': complexity_threshold,
+            'algorithm': 'Adaptive LSB with Sobel Edge Detection'
+        }
+        
+        return stego_image, metadata
+
+    def adaptive_lsb_extract(self, stego_image: np.ndarray) -> Tuple[str, Dict[str, Any]]:
+        """Trích xuất dữ liệu từ ảnh stego"""
+        h, w, c = stego_image.shape
+        
+        # Tính lại complexity map
+        complexity_map = self.sobel_edge_detection(stego_image)
+        
+        # Tính lại block complexity và embedding mask
+        block_h, block_w = h // 2, w // 2
+        block_complexity = np.zeros((block_h, block_w))
+        
+        for i in range(block_h):
+            for j in range(block_w):
+                block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
+                block_complexity[i, j] = np.mean(block_region)
+        
+        complexity_threshold = np.mean(block_complexity)
+        embedding_mask = np.zeros((h, w), dtype=np.uint8)
+        
+        for i in range(block_h):
+            for j in range(block_w):
+                bits_per_pixel = 2 if block_complexity[i, j] > complexity_threshold else 1
+                embedding_mask[i*2:(i+1)*2, j*2:(j+1)*2] = bits_per_pixel
+        
+        # Trích xuất bits
+        extracted_bits = []
+        
+        for i in range(h):
+            for j in range(w):
+                bits_to_extract = embedding_mask[i, j]
+                if bits_to_extract == 0:
+                    continue
+                
+                blue_value = stego_image[i, j, 2]
+                
+                if bits_to_extract == 1:
+                    bit = blue_value & 1
+                    extracted_bits.append(str(bit))
+                else:
+                    two_bits = blue_value & 3
+                    extracted_bits.append(format(two_bits, '02b'))
+        
+        binary_string = ''.join(extracted_bits)
+        extracted_text = self.binary_to_text(binary_string)
+        
+        metadata = {
+            'bits_extracted': len(binary_string),
+            'complexity_threshold': complexity_threshold,
+            'text_length': len(extracted_text)
+        }
+        
+        return extracted_text, metadata
+
+    def calculate_psnr(self, original: np.ndarray, modified: np.ndarray) -> float:
+        """Tính Peak Signal-to-Noise Ratio (PSNR)"""
+        mse = np.mean((original.astype(float) - modified.astype(float)) ** 2)
+        
+        if mse == 0:
+            return float('inf')
+        
+        max_pixel = 255.0
+        psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+        
+        return round(psnr, 2)
+
+    def calculate_ssim(self, original: np.ndarray, modified: np.ndarray) -> float:
+        """Tính Structural Similarity Index (SSIM)"""
+        # Chuyển thành grayscale
+        if len(original.shape) == 3:
+            orig_gray = np.dot(original[...,:3], [0.299, 0.587, 0.114])
+            mod_gray = np.dot(modified[...,:3], [0.299, 0.587, 0.114])
+        else:
+            orig_gray = original
+            mod_gray = modified
+        
+        # SSIM calculation
         c1 = (0.01 * 255) ** 2
         c2 = (0.03 * 255) ** 2
         
-        # Calculate SSIM
-        ssim = ((2 * mu1 * mu2 + c1) * (2 * cov12 + c2)) / ((mu1 ** 2 + mu2 ** 2 + c1) * (var1 + var2 + c2))
+        mu1 = np.mean(orig_gray)
+        mu2 = np.mean(mod_gray)
+        var1 = np.var(orig_gray)
+        var2 = np.var(mod_gray)
+        cov12 = np.mean((orig_gray - mu1) * (mod_gray - mu2))
         
-        return max(0.0, min(1.0, ssim))
+        numerator = (2 * mu1 * mu2 + c1) * (2 * cov12 + c2)
+        denominator = (mu1**2 + mu2**2 + c1) * (var1 + var2 + c2)
+        
+        ssim = numerator / denominator
+        return round(float(ssim), 4)
+
+    def image_to_base64(self, image_array: np.ndarray) -> str:
+        """Chuyển numpy array thành base64 string"""
+        image = Image.fromarray(image_array.astype(np.uint8))
+        buffer = io.BytesIO()
+        image.save(buffer, format='PNG')
+        buffer.seek(0)
+        base64_string = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return base64_string
+
+    def generate_complexity_visualization(self, complexity_map: np.ndarray) -> str:
+        """Tạo visualization cho complexity map"""
+        # Normalize complexity map to 0-255 for visualization
+        if complexity_map.max() > 0:
+            normalized = (complexity_map / complexity_map.max() * 255).astype(np.uint8)
+        else:
+            normalized = complexity_map.astype(np.uint8)
+        
+        # Create RGB image from grayscale (heatmap effect)
+        height, width = normalized.shape
+        rgb_image = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # Blue to red heatmap
+        rgb_image[:, :, 0] = normalized  # Red channel
+        rgb_image[:, :, 2] = 255 - normalized  # Blue channel (inverse)
+        
+        return self.image_to_base64(rgb_image)
+
+    def generate_embedding_mask_visualization(self, embedding_mask: np.ndarray) -> str:
+        """Tạo visualization cho embedding mask"""
+        height, width = embedding_mask.shape
+        rgb_image = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # 1-bit areas = green, 2-bit areas = yellow, no embedding = black
+        mask_1bit = (embedding_mask == 1)
+        mask_2bit = (embedding_mask == 2)
+        
+        rgb_image[mask_1bit] = [0, 255, 0]    # Green for 1-bit areas
+        rgb_image[mask_2bit] = [255, 255, 0]  # Yellow for 2-bit areas
+        
+        return self.image_to_base64(rgb_image)
+
+    def calculate_capacity_analysis(self, image_size: Tuple[int, int], complexity_map: np.ndarray) -> Dict[str, Any]:
+        """Tính toán phân tích capacity chi tiết"""
+        h, w = image_size[1], image_size[0]
+        
+        # Chia thành blocks và tính capacity
+        block_h, block_w = h // 2, w // 2
+        total_capacity_bits = 0
+        total_capacity_bytes = 0
+        high_complexity_blocks = 0
+        low_complexity_blocks = 0
+        
+        # Tính threshold
+        complexity_threshold = np.mean(complexity_map)
+        
+        for i in range(block_h):
+            for j in range(block_w):
+                block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
+                block_complexity = np.mean(block_region)
+                
+                if block_complexity > complexity_threshold:
+                    total_capacity_bits += 8  # 2 bits × 4 pixels
+                    high_complexity_blocks += 1
+                else:
+                    total_capacity_bits += 4  # 1 bit × 4 pixels
+                    low_complexity_blocks += 1
+        
+        total_capacity_bytes = total_capacity_bits // 8
+        total_pixels = h * w
+        average_bpp = total_capacity_bits / total_pixels
+        
+        return {
+            'total_capacity_bits': total_capacity_bits,
+            'total_capacity_bytes': total_capacity_bytes,
+            'total_capacity_chars': total_capacity_bytes,  # Assuming 1 byte per char
+            'average_bpp': round(average_bpp, 4),
+            'high_complexity_blocks': high_complexity_blocks,
+            'low_complexity_blocks': low_complexity_blocks,
+            'total_blocks': high_complexity_blocks + low_complexity_blocks,
+            'complexity_threshold': round(complexity_threshold, 2),
+            'high_complexity_percentage': round((high_complexity_blocks / (high_complexity_blocks + low_complexity_blocks)) * 100, 2),
+            'low_complexity_percentage': round((low_complexity_blocks / (high_complexity_blocks + low_complexity_blocks)) * 100, 2),
+            'utilization_1bit': round((low_complexity_blocks * 4 / total_capacity_bits) * 100, 2),
+            'utilization_2bit': round((high_complexity_blocks * 8 / total_capacity_bits) * 100, 2)
+        }
+
+    def embed_text_in_image(self, cover_image: Image.Image, secret_text: str) -> Dict[str, Any]:
+        """Main function để embed text vào image"""
+        try:
+            cover_array = np.array(cover_image)
+            binary_data = self.text_to_binary(secret_text)
+            
+            if not binary_data:
+                raise ValueError("Failed to convert text to binary")
+            
+            # Generate complexity map for visualizations
+            complexity_map = self.sobel_edge_detection(cover_array)
+            
+            stego_array, embed_metadata = self.adaptive_lsb_embed(cover_array, binary_data)
+            
+            # Calculate metrics
+            psnr = self.calculate_psnr(cover_array, stego_array)
+            ssim = self.calculate_ssim(cover_array, stego_array)
+            stego_base64 = self.image_to_base64(stego_array)
+            
+            # Generate visualizations
+            complexity_visualization = self.generate_complexity_visualization(complexity_map)
+            
+            # Create embedding mask for visualization
+            h, w = complexity_map.shape
+            block_h, block_w = h // 2, w // 2
+            embedding_mask = np.zeros((h, w), dtype=np.uint8)
+            complexity_threshold = np.mean(complexity_map)
+            
+            for i in range(block_h):
+                for j in range(block_w):
+                    block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
+                    block_complexity = np.mean(block_region)
+                    bits_per_pixel = 2 if block_complexity > complexity_threshold else 1
+                    embedding_mask[i*2:(i+1)*2, j*2:(j+1)*2] = bits_per_pixel
+            
+            embedding_mask_visualization = self.generate_embedding_mask_visualization(embedding_mask)
+            
+            # Calculate capacity analysis
+            capacity_analysis = self.calculate_capacity_analysis(cover_image.size, complexity_map)
+            
+            return {
+                'success': True,
+                'stego_image_base64': stego_base64,
+                'complexity_map_base64': complexity_visualization,
+                'embedding_mask_base64': embedding_mask_visualization,
+                'metrics': {
+                    'psnr': psnr,
+                    'ssim': ssim,
+                    'text_length_chars': len(secret_text),
+                    'text_length_bytes': len(secret_text.encode('utf-8')),
+                    'binary_length_bits': len(binary_data),
+                    'image_size': f"{cover_image.size[0]}x{cover_image.size[1]}"
+                },
+                'embedding_info': embed_metadata,
+                'capacity_analysis': capacity_analysis,
+                'algorithm_info': {
+                    'method': 'Adaptive LSB with Sobel Edge Detection',
+                    'complexity_analysis': 'Sobel Gradient Magnitude',
+                    'adaptive_strategy': '1-bit LSB for smooth areas, 2-bit LSB for complex areas',
+                    'embedding_domain': 'Spatial Domain (Blue Channel)',
+                    'data_processing': f"UTF-8 → Binary → LSB Embedding"
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'error_type': type(e).__name__
+            }
+
+    def extract_text_from_image(self, stego_image: Image.Image) -> Dict[str, Any]:
+        """Main function để extract text từ stego image"""
+        try:
+            stego_array = np.array(stego_image)
+            extracted_text, extract_metadata = self.adaptive_lsb_extract(stego_array)
+            
+            return {
+                'success': True,
+                'extracted_text': extracted_text,
+                'extraction_info': extract_metadata,
+                'image_info': {
+                    'size': f"{stego_image.size[0]}x{stego_image.size[1]}",
+                    'mode': stego_image.mode,
+                    'format': stego_image.format or 'Unknown'
+                },
+                'algorithm_info': {
+                    'method': 'Adaptive LSB with Sobel Edge Detection',
+                    'extraction_domain': 'Spatial Domain (Blue Channel)'
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'error_type': type(e).__name__
+            }
+
+
+# Global service instance
+steganography_service = SteganographyService()

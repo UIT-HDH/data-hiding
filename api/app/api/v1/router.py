@@ -1,7 +1,7 @@
 """
-API Router for version 1 of the Steganography API.
+API Router for v1 endpoints - Academic Project.
 
-Focus: Tab "Embed" functionality only for academic project.
+Đồ án môn học: Data Hiding với Adaptive LSB Steganography
 """
 
 from fastapi import APIRouter
@@ -10,36 +10,16 @@ from app.api.v1.endpoints import embed
 # Create the main API router for v1
 api_router = APIRouter()
 
-# Include only embed endpoint router for Tab "Embed" functionality
-api_router.include_router(embed.router, tags=["embed"])
+# Include embed router (main functionality)
+api_router.include_router(embed.router, tags=["steganography"])
 
-# Health check endpoint
+# Health check for the API
 @api_router.get("/health")
-async def health_check():
-    """
-    Health check endpoint to verify the API is running.
-    
-    Returns:
-        dict: Health status information
-    """
+async def api_health():
+    """API health check endpoint"""
     return {
         "status": "healthy",
-        "message": "Steganography API is running",
-        "version": "1.0.0"
-    }
-
-# Root endpoint
-@api_router.get("/")
-async def root():
-    """
-    Root endpoint with basic API information.
-    
-    Returns:
-        dict: API welcome message and information
-    """
-    return {
-        "message": "Welcome to the Steganography API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/api/v1/health"
+        "api_version": "v1",
+        "algorithm": "Adaptive LSB with Sobel Edge Detection",
+        "available_endpoints": ["/embed", "/extract", "/health"]
     }

@@ -1,0 +1,44 @@
+INFO:     Will watch for changes in these directories: ['/Users/daonguyen/Documents/Driver/my_study/Course/Data Hiding/DO_AN/data-hiding/api']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [48413] using WatchFiles
+🚀 Starting Academic Steganography Backend...
+📚 Đồ án môn học: Data Hiding với Adaptive LSB Steganography
+🔬 Algorithm: Sobel Edge Detection + Adaptive LSB
+🌐 Server: http://localhost:8000
+📖 API Docs: http://localhost:8000/docs
+❤️  Health Check: http://localhost:8000/health
+------------------------------------------------------------
+INFO:     Started server process [48417]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     127.0.0.1:54068 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54128 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54171 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54194 - "POST /embed HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:54216 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54264 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54307 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54356 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54407 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54194 - "POST /api/v1/embed HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54453 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54496 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54540 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54586 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54630 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54673 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54716 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54759 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54808 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54852 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54896 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54944 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54987 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55030 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55074 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55117 - "GET /health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [48417]
+INFO:     Stopping reloader process [48413]
