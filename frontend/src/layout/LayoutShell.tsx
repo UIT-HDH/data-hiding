@@ -24,7 +24,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     localStorage.setItem('layout_sider_collapsed', sidebarCollapsed.toString())
   }, [sidebarCollapsed])
 
-  // Keyboard shortcuts
+  // Phím tắt bàn phím
   React.useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.ctrlKey) {
@@ -36,26 +36,26 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           case 'e':
             e.preventDefault()
             if (path === '/embed') {
-              // Mock embed action - to be implemented in actual page
-              console.log('Embed shortcut triggered')
+              // Hành động nhúng giả - sẽ được implement trong trang thực tế
+              console.log('Phím tắt nhúng được kích hoạt')
             }
             break
           case 'x':
             e.preventDefault()
             if (path === '/extract') {
-              // Mock extract action - to be implemented in actual page
-              console.log('Extract shortcut triggered')
+              // Hành động giải mã giả - sẽ được implement trong trang thực tế
+              console.log('Phím tắt giải mã được kích hoạt')
             }
             break
           case 's':
             e.preventDefault()
-            // Mock save stego - to be implemented
-            console.log('Save stego shortcut triggered')
+            // Lưu stego giả - sẽ được implement
+            console.log('Phím tắt lưu stego được kích hoạt')
             break
           case 'p':
             e.preventDefault()
-            // Mock preview overlay - to be implemented
-            console.log('Preview overlay shortcut triggered')
+            // Xem trước overlay giả - sẽ được implement
+            console.log('Phím tắt xem trước overlay được kích hoạt')
             break
         }
       }
@@ -114,7 +114,7 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
           width={250}
           style={{ background: '#ffffff', borderRight: '1px solid #f0f0f0' }}
         >
-          {/* Sider Header */}
+          {/* Header Sidebar */}
           <div
             style={{
               padding: 16,
@@ -147,25 +147,6 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
             style={{ borderRight: 0 }}
           />
 
-          {/* Shortcuts section */}
-          {!sidebarCollapsed && (
-            <div
-              style={{
-                margin: 16,
-                padding: 8,
-                background: '#f0f0f0',
-                borderRadius: 4,
-                fontSize: 12,
-              }}
-            >
-              <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Phím tắt:</div>
-              <div>Ctrl+B: Mở/đóng menu</div>
-              <div>Ctrl+E: Thực hiện Nhúng</div>
-              <div>Ctrl+X: Thực hiện Giải</div>
-              <div>Ctrl+S: Tải/Save stego</div>
-              <div>Ctrl+P: Xem trước Overlay</div>
-            </div>
-          )}
         </Sider>
 
         <Layout>

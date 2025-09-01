@@ -105,9 +105,9 @@ export default function BatchPage() {
               } else {
                 return {
                   ...item,
-                  payload: 'Error',
-                  psnr: 'Error',
-                  ssim: 'Error',
+                  payload: 'Lỗi',
+                  psnr: 'Lỗi',
+                  ssim: 'Lỗi',
                   time: `${(Math.random() * 0.5 + 0.5).toFixed(1)}s`,
                   status: 'error' as const,
                 }
@@ -122,9 +122,9 @@ export default function BatchPage() {
         setProgress(currentProgress)
       }
       
-      message.success('Batch processing completed!')
+      message.success('Xử lý hàng loạt hoàn thành!')
     } catch (error) {
-      message.error('Có lỗi xảy ra trong quá trình xử lý batch')
+      message.error('Có lỗi xảy ra trong quá trình xử lý hàng loạt')
     } finally {
       setIsProcessing(false)
     }
@@ -145,13 +145,13 @@ export default function BatchPage() {
 
   const columns = [
     {
-      title: 'Filename',
+      title: 'Tên File',
       dataIndex: 'filename',
       key: 'filename',
       ellipsis: true,
     },
     {
-      title: 'Payload',
+      title: 'Dữ Liệu',
       dataIndex: 'payload',
       key: 'payload',
       width: 100,
@@ -169,22 +169,22 @@ export default function BatchPage() {
       width: 100,
     },
     {
-      title: 'Time',
+      title: 'Thời Gian',
       dataIndex: 'time',
       key: 'time',
       width: 80,
     },
     {
-      title: 'Status',
+      title: 'Trạng Thái',
       dataIndex: 'status',
       key: 'status',
       width: 100,
       render: (status: BatchResult['status']) => {
         const statusConfig = {
-          pending: { color: '#d9d9d9', text: 'Pending' },
-          processing: { color: '#1890ff', text: 'Processing...' },
-          success: { color: '#52c41a', text: 'Success' },
-          error: { color: '#ff4d4f', text: 'Error' },
+          pending: { color: '#d9d9d9', text: 'Chờ xử lý' },
+          processing: { color: '#1890ff', text: 'Đang xử lý...' },
+          success: { color: '#52c41a', text: 'Thành công' },
+          error: { color: '#ff4d4f', text: 'Lỗi' },
         }
         const config = statusConfig[status]
         return (
@@ -201,11 +201,11 @@ export default function BatchPage() {
       <Row gutter={[16, 16]}>
         {/* Configuration Panel */}
         <Col span={24}>
-          <Card title="Cấu hình Batch Processing">
+          <Card title="Cấu Hình Xử Lý Hàng Loạt">
             <Row gutter={[16, 16]}>
               {/* File Upload */}
               <Col xs={24} lg={12}>
-                <Text strong>Upload Cover Images:</Text>
+                <Text strong>Tải Lên Ảnh Cover:</Text>
                 <Dragger
                   accept=".png,.jpg,.jpeg"
                   multiple
@@ -218,17 +218,17 @@ export default function BatchPage() {
                     <InboxOutlined />
                   </p>
                   <p className="ant-upload-text">
-                    Click or drag multiple images to upload
+                    Click hoặc kéo thả nhiều ảnh để tải lên
                   </p>
                   <p className="ant-upload-hint">
-                    Supports PNG, JPG formats (multiple selection)
+                    Hỗ trợ định dạng PNG, JPG (chọn nhiều)
                   </p>
                 </Dragger>
                 
                 {coverFiles.length > 0 && (
                   <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
-                    {coverFiles.length} files selected (
-                    {Math.round(coverFiles.reduce((sum, f) => sum + f.size, 0) / 1024)}KB total)
+                    {coverFiles.length} files được chọn (
+                    {Math.round(coverFiles.reduce((sum, f) => sum + f.size, 0) / 1024)}KB tổng cộng)
                   </div>
                 )}
               </Col>
@@ -244,17 +244,17 @@ export default function BatchPage() {
                       onChange={setMethod}
                       style={{ width: '100%', marginTop: 4 }}
                       options={[
-                        { label: 'Sobel Edge Detection', value: 'sobel' },
-                        { label: 'Laplacian Filter', value: 'laplacian' },
-                        { label: 'Variance Analysis', value: 'variance' },
-                        { label: 'Entropy Calculation', value: 'entropy' },
+                        { label: 'Phát Hiện Biên Sobel', value: 'sobel' },
+                        { label: 'Bộ Lọc Laplacian', value: 'laplacian' },
+                        { label: 'Phân Tích Phương Sai', value: 'variance' },
+                        { label: 'Tính Toán Entropy', value: 'entropy' },
                       ]}
                     />
                   </div>
 
                   {/* Payload Cap */}
                   <div>
-                    <Text strong>Payload cap (%):</Text>
+                    <Text strong>Dung lượng tối đa (%):</Text>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                       <Slider
                         style={{ flex: 1 }}
@@ -269,11 +269,11 @@ export default function BatchPage() {
 
                   {/* Seed */}
                   <div>
-                    <Text strong>Seed/PRNG:</Text>
+                    <Text strong>Hạt giống/PRNG:</Text>
                     <Input
                       value={seed}
                       onChange={(e) => setSeed(e.target.value)}
-                      placeholder="Enter seed"
+                      placeholder="Nhập hạt giống"
                       style={{ marginTop: 4 }}
                       addonAfter={
                         <Button type="link" size="small" onClick={generateSeed}>
@@ -286,7 +286,7 @@ export default function BatchPage() {
                   {/* Options */}
                   <div>
                     <Checkbox checked={encrypt} onChange={(e) => setEncrypt(e.target.checked)}>
-                      Encrypt (default: ON)
+                      Mã hóa (mặc định: BẬT)
                     </Checkbox>
                     <br />
                     <Checkbox
@@ -294,7 +294,7 @@ export default function BatchPage() {
                       onChange={(e) => setCompress(e.target.checked)}
                       style={{ marginTop: 8 }}
                     >
-                      Compress (default: OFF)
+                      Nén (mặc định: TẮT)
                     </Checkbox>
                   </div>
                 </div>
@@ -310,17 +310,17 @@ export default function BatchPage() {
                 disabled={!canProcess}
                 onClick={mockBatchProcess}
               >
-                Chạy lô
+                Chạy Lô
               </Button>
               <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                Reset
+                Làm Mới
               </Button>
               <Button
                 icon={<ExportOutlined />}
                 onClick={mockExportCSV}
                 disabled={results.length === 0 || results.every(r => r.status === 'pending')}
               >
-                Export CSV
+                Xuất CSV
               </Button>
             </div>
           </Card>
@@ -328,7 +328,7 @@ export default function BatchPage() {
 
         {/* Progress & Results */}
         <Col span={24}>
-          <Card title="Tiến độ & Kết quả">
+          <Card title="Tiến Độ & Kết Quả">
             {/* Progress */}
             {isProcessing && (
               <div style={{ marginBottom: 16 }}>
@@ -345,7 +345,7 @@ export default function BatchPage() {
               scroll={{ x: 600 }}
               size="small"
               locale={{
-                emptyText: results.length === 0 ? 'Chưa có file nào được upload' : 'Không có dữ liệu',
+                emptyText: results.length === 0 ? 'Chưa có file nào được tải lên' : 'Không có dữ liệu',
               }}
             />
           </Card>
