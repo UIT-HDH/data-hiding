@@ -27,7 +27,7 @@
   - Tính average complexity per block
   - Threshold = mean complexity
   - Low complexity (< threshold) → 1 bit LSB
-  - High complexity (≥ threshold) → 2 bit LSB
+  - High complexity (≥ threshold) → 2 bit LSBNh
   - Embed vào Blue channel (ít nhạy cảm nhất)
 
 - ✅ **Adaptive LSB Extraction** (lines 276-354)
@@ -295,3 +295,7 @@ File Size: Original + minimal overhead
 - ✅ **Production-ready** code quality
 
 **Status: DEPLOYMENT READY** 🚀
+
+
+
+

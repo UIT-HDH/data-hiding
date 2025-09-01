@@ -104,14 +104,14 @@ export default function ExtractPage() {
       <Row gutter={[16, 16]}>
         {/* Left Column - Input Form */}
         <Col xs={24} lg={12}>
-          <Card title="Thông tin giải mã" style={{ height: '100%' }}>
+          <Card title="Thông Tin Giải Mã" style={{ height: '100%' }}>
             <Form
               form={form}
               layout="vertical"
               onFinish={mockExtract}
             >
               {/* Stego Upload */}
-              <Form.Item label="Upload Stego Image" required>
+              <Form.Item label="Tải Lên Ảnh Stego" required>
                 <Dragger
                   accept=".png,.jpg,.jpeg"
                   showUploadList={false}
@@ -122,10 +122,10 @@ export default function ExtractPage() {
                     <InboxOutlined />
                   </p>
                   <p className="ant-upload-text">
-                    {stegoFile ? stegoFile.name : 'Click or drag stego image to upload'}
+                    {stegoFile ? stegoFile.name : 'Click hoặc kéo thả ảnh stego để tải lên'}
                   </p>
                   <p className="ant-upload-hint">
-                    Supports PNG, JPG formats
+                    Hỗ trợ định dạng PNG, JPG
                   </p>
                 </Dragger>
                 
@@ -139,18 +139,18 @@ export default function ExtractPage() {
               {/* Password */}
               <Form.Item 
                 name="password" 
-                label="Password (optional)"
+                label="Mật Khẩu (tùy chọn)"
               >
-                <Input.Password placeholder="Enter password if used during embedding" />
+                <Input.Password placeholder="Nhập mật khẩu nếu đã sử dụng khi nhúng dữ liệu" />
               </Form.Item>
 
               {/* Seed/PRNG */}
               <Form.Item 
                 name="seed" 
-                label="Seed/PRNG"
+                label="Hạt Giống/PRNG"
               >
                 <Input
-                  placeholder="Enter seed used during embedding"
+                  placeholder="Nhập hạt giống đã sử dụng khi nhúng dữ liệu"
                   addonAfter={
                     <Button type="link" size="small" onClick={generateSeed}>
                       Tạo
@@ -162,13 +162,13 @@ export default function ExtractPage() {
               {/* Domain */}
               <Form.Item 
                 name="domain" 
-                label="Domain"
+                label="Miền"
                 initialValue="spatial"
               >
                 <Select
                   options={[
-                    { label: 'Spatial Domain', value: 'spatial' },
-                    { label: 'DCT Domain', value: 'dct' },
+                    { label: 'Miền Không Gian', value: 'spatial' },
+                    { label: 'Miền DCT', value: 'dct' },
                   ]}
                 />
               </Form.Item>
@@ -183,10 +183,10 @@ export default function ExtractPage() {
                     disabled={!canExtract}
                     onClick={mockExtract}
                   >
-                    Giải
+                    Giải Mã
                   </Button>
                   <Button icon={<ReloadOutlined />} onClick={handleReset}>
-                    Reset
+                    Làm Mới
                   </Button>
                 </div>
               </Form.Item>
@@ -196,10 +196,10 @@ export default function ExtractPage() {
 
         {/* Right Column - Results */}
         <Col xs={24} lg={12}>
-          <Card title="Kết quả" style={{ height: '100%' }}>
+          <Card title="Kết Quả" style={{ height: '100%' }}>
             {!results ? (
               <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>
-                <Text>Chưa có kết quả. Upload ảnh stego và nhấn "Giải" để bắt đầu.</Text>
+                <Text>Chưa có kết quả. Tải lên ảnh stego và nhấn "Giải Mã" để bắt đầu.</Text>
               </div>
             ) : (
               <>
@@ -221,7 +221,7 @@ export default function ExtractPage() {
                             icon={<CopyOutlined />}
                             onClick={handleCopyText}
                           >
-                            Copy
+                            Sao Chép
                           </Button>
                         </div>
                         <TextArea
@@ -258,7 +258,7 @@ export default function ExtractPage() {
                             icon={<DownloadOutlined />}
                             onClick={mockDownloadFile}
                           >
-                            Download
+                            Tải Xuống
                           </Button>
                         </div>
                       </div>

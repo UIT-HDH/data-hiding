@@ -1,0 +1,18 @@
+INFO:     Started server process [48052]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+🚀 Starting CORS-enabled Tab Embed API...
+✅ CORS: Allow all origins
+🔗 Endpoints: /health, /embed, /embed/methods, /embed/domains
+INFO:     127.0.0.1:61029 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61245 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61313 - "POST /embed HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61376 - "POST /embed HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61419 - "POST /embed HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61441 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61532 - "GET / HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [48052]

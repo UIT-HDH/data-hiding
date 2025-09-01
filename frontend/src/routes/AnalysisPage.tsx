@@ -82,7 +82,7 @@ export default function AnalysisPage() {
       <Row gutter={[16, 16]}>
         {/* Upload Section */}
         <Col span={24}>
-          <Card title="Tải ảnh phân tích">
+          <Card title="Tải Lên Ảnh Phân Tích">
             <Row gutter={16}>
               <Col xs={24} lg={12}>
                 <Dragger
@@ -95,10 +95,10 @@ export default function AnalysisPage() {
                     <InboxOutlined />
                   </p>
                   <p className="ant-upload-text">
-                    {uploadedFile ? uploadedFile.name : 'Click or drag image to upload'}
+                    {uploadedFile ? uploadedFile.name : 'Click hoặc kéo thả ảnh để tải lên'}
                   </p>
                   <p className="ant-upload-hint">
-                    Supports PNG, JPG formats for complexity analysis
+                    Hỗ trợ định dạng PNG, JPG để phân tích độ phức tạp
                   </p>
                 </Dragger>
                 
@@ -116,10 +116,10 @@ export default function AnalysisPage() {
                     disabled={!uploadedFile}
                     onClick={mockAnalyze}
                   >
-                    Phân tích
+                    Phân Tích
                   </Button>
                   <Button onClick={handleReset}>
-                    Reset
+                    Làm Mới
                   </Button>
                 </div>
               </Col>
@@ -133,7 +133,7 @@ export default function AnalysisPage() {
                       <Image
                         src={uploadedPreview}
                         style={{ maxWidth: '100%', maxHeight: 280 }}
-                        placeholder="Loading..."
+                        placeholder="Đang tải..."
                       />
                     </div>
                   </div>
@@ -146,56 +146,56 @@ export default function AnalysisPage() {
         {/* Complexity Maps */}
         {complexityMaps && (
           <Col span={24}>
-            <Card title="Bản đồ độ phức tạp">
+            <Card title="Bản Đồ Độ Phức Tạp">
               <Tabs defaultActiveKey="sobel" type="card">
-                <TabPane tab="Sobel Edge" key="sobel">
+                <TabPane tab="Phát Hiện Biên Sobel" key="sobel">
                   <div style={{ textAlign: 'center' }}>
                     <Image
                       src={complexityMaps.sobel}
                       style={{ maxWidth: '100%', maxHeight: 400 }}
-                      placeholder="Loading Sobel map..."
+                      placeholder="Đang tải bản đồ Sobel..."
                     />
                     <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                      Sobel Edge Detection - Phát hiện biên cạnh trong ảnh
+                      Phát Hiện Biên Sobel - Phát hiện biên cạnh trong ảnh
                     </div>
                   </div>
                 </TabPane>
                 
-                <TabPane tab="Laplacian" key="laplacian">
+                <TabPane tab="Bộ Lọc Laplacian" key="laplacian">
                   <div style={{ textAlign: 'center' }}>
                     <Image
                       src={complexityMaps.laplacian}
                       style={{ maxWidth: '100%', maxHeight: 400 }}
-                      placeholder="Loading Laplacian map..."
+                      placeholder="Đang tải bản đồ Laplacian..."
                     />
                     <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                      Laplacian Filter - Phát hiện vùng có độ thay đổi cường độ cao
+                      Bộ Lọc Laplacian - Phát hiện vùng có độ thay đổi cường độ cao
                     </div>
                   </div>
                 </TabPane>
                 
-                <TabPane tab="Variance" key="variance">
+                <TabPane tab="Phân Tích Phương Sai" key="variance">
                   <div style={{ textAlign: 'center' }}>
                     <Image
                       src={complexityMaps.variance}
                       style={{ maxWidth: '100%', maxHeight: 400 }}
-                      placeholder="Loading Variance map..."
+                      placeholder="Đang tải bản đồ Phương Sai..."
                     />
                     <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                      Variance Analysis - Phân tích độ biến thiên cục bộ
+                      Phân Tích Phương Sai - Phân tích độ biến thiên cục bộ
                     </div>
                   </div>
                 </TabPane>
                 
-                <TabPane tab="Entropy" key="entropy">
+                <TabPane tab="Tính Toán Entropy" key="entropy">
                   <div style={{ textAlign: 'center' }}>
                     <Image
                       src={complexityMaps.entropy}
                       style={{ maxWidth: '100%', maxHeight: 400 }}
-                      placeholder="Loading Entropy map..."
+                      placeholder="Đang tải bản đồ Entropy..."
                     />
                     <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                      Entropy Calculation - Đo lường thông tin cục bộ
+                      Tính Toán Entropy - Đo lường thông tin cục bộ
                     </div>
                   </div>
                 </TabPane>
@@ -207,11 +207,11 @@ export default function AnalysisPage() {
         {/* Curve Editor & BPP Preview */}
         {complexityMaps && (
           <Col span={24}>
-            <Card title="Curve Editor & BPP Preview">
+            <Card title="Trình Chỉnh Sửa Đường Cong & Xem Trước BPP">
               <Row gutter={16}>
                 <Col xs={24} lg={12}>
                   <div>
-                    <Text strong>BPP Threshold:</Text>
+                    <Text strong>Ngưỡng BPP:</Text>
                     <div style={{ marginTop: 8 }}>
                       <Slider
                         min={1}
@@ -230,7 +230,7 @@ export default function AnalysisPage() {
                         }}
                       />
                       <div style={{ textAlign: 'center', marginTop: 8, color: '#666' }}>
-                        Current threshold: {bppThreshold} bpp
+                        Ngưỡng hiện tại: {bppThreshold} bpp
                       </div>
                     </div>
                   </div>
@@ -246,25 +246,25 @@ export default function AnalysisPage() {
                       color: '#999',
                     }}
                   >
-                    <Text>Curve Editor Placeholder</Text>
+                    <Text>Trình Chỉnh Sửa Đường Cong</Text>
                     <br />
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      Interactive curve editor for fine-tuning complexity thresholds
+                      Trình chỉnh sửa đường cong tương tác để tinh chỉnh ngưỡng độ phức tạp
                     </Text>
                   </div>
                 </Col>
                 
                 <Col xs={24} lg={12}>
                   <div>
-                    <Text strong>BPP Map Preview:</Text>
+                    <Text strong>Xem Trước Bản Đồ BPP:</Text>
                     <div style={{ marginTop: 8, textAlign: 'center' }}>
                       <Image
                         src={getMockBppMap()}
                         style={{ maxWidth: '100%', maxHeight: 300 }}
-                        placeholder="Loading BPP map..."
+                        placeholder="Đang tải bản đồ BPP..."
                       />
                       <div style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
-                        Bits Per Pixel map với threshold {bppThreshold}
+                        Bản đồ Bits Per Pixel với ngưỡng {bppThreshold}
                       </div>
                     </div>
                   </div>

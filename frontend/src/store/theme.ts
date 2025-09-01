@@ -7,14 +7,14 @@ function getInitialTheme(): ThemeMode {
 
 export const themeAtomKey = 'themeAtom'
 
-import { atom } from 'recoil'
-
-export const themeAtom = atom<ThemeMode>({
+// Simple theme store without recoil dependency
+export const themeAtom = {
   key: themeAtomKey,
   default: getInitialTheme(),
-  effects: [
-    ({ onSet }) => {
-      onSet((val) => localStorage.setItem('theme', val))
-    },
-  ],
-})
+  getValue: (): ThemeMode => {
+    return getInitialTheme()
+  },
+  setValue: (value: ThemeMode) => {
+    localStorage.setItem('theme', value)
+  }
+}

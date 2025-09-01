@@ -30,18 +30,28 @@ const { Text, Title } = Typography
  */
 interface SimpleEmbedResult {
   stegoImage: string // Base64 encoded PNG
+  complexityMap: string // Base64 encoded complexity map
+  embeddingMask: string // Base64 encoded embedding mask
   metrics: {
     psnr: number
     ssim: number
     textLength: number
     binaryLength: number
     imageSize: string
+    capacityInfo: {
+      total_bytes: number
+      bits_per_pixel: number
+      low_complexity_percentage: number
+      high_complexity_percentage: number
+      threshold: number
+    }
   }
   algorithm: {
     name: string
     complexity_method: string
     embedding_strategy: string
     channel: string
+    data_processing: string
   }
 }
 
@@ -134,7 +144,7 @@ export default function EmbedPage() {
    */
   const handleEmbed = async () => {
     if (!canEmbed) return
-
+    
     setIsProcessing(true)
     setResults(null)
 
@@ -171,7 +181,7 @@ export default function EmbedPage() {
       } else if (error.response?.data?.detail) {
         message.error(`Lỗi: ${error.response.data.detail}`)
       } else {
-        message.error('Có lỗi xảy ra khi nhúng dữ liệu')
+      message.error('Có lỗi xảy ra khi nhúng dữ liệu')
       }
     } finally {
       setIsProcessing(false)
@@ -187,7 +197,7 @@ export default function EmbedPage() {
       {/* Header */}
       <Card style={{ marginBottom: 24 }}>
         <Title level={2}>
-          🔒 Steganography - Embed Text
+          🔒 Steganography - Nhúng Dữ Liệu
         </Title>
         <Text type="secondary">
           Giấu text vào ảnh bằng thuật toán <strong>Sobel Edge Detection + Adaptive LSB</strong>
@@ -202,31 +212,31 @@ export default function EmbedPage() {
         {/* Left Column: Input */}
         <Col xs={24} lg={12}>
           {/* Upload Cover Image */}
-          <Card title="📁 Upload Cover Image" style={{ marginBottom: 24 }}>
-            <Dragger
+          <Card title="📁 Tải Lên Ảnh Cover" style={{ marginBottom: 24 }}>
+              <Dragger
               name="coverImage"
               multiple={false}
               accept="image/*"
               beforeUpload={() => false} // Prevent auto upload
-              onChange={handleCoverUpload}
+                onChange={handleCoverUpload}
               style={{ marginBottom: 16 }}
-            >
-              <p className="ant-upload-drag-icon">
-                <InboxOutlined />
-              </p>
-              <p className="ant-upload-text">
+              >
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined />
+                </p>
+                <p className="ant-upload-text">
                 Kéo thả ảnh vào đây hoặc click để chọn
-              </p>
-              <p className="ant-upload-hint">
+                </p>
+                <p className="ant-upload-hint">
                 Hỗ trợ: PNG, JPG, JPEG
-              </p>
-            </Dragger>
-
+                </p>
+              </Dragger>
+              
             {coverPreview && (
               <div style={{ textAlign: 'center' }}>
                 <Image
                   src={coverPreview}
-                  alt="Cover Preview"
+                  alt="Xem Trước Ảnh Cover"
                   style={{ maxWidth: '100%', maxHeight: '200px' }}
                 />
                 <div style={{ marginTop: 8 }}>
@@ -239,7 +249,7 @@ export default function EmbedPage() {
           </Card>
 
           {/* Secret Text Input */}
-          <Card title="✏️ Secret Text Message">
+          <Card title="✏️ Nhập Secret Text">
             <TextArea
               placeholder="Nhập text cần giấu vào ảnh..."
               value={secretText}
@@ -251,8 +261,8 @@ export default function EmbedPage() {
             />
             
             <Alert
-              message="Lưu ý"
-              description="Text sẽ được mã hóa UTF-8 → binary → nhúng vào channel Blue của ảnh. Dung lượng text phụ thuộc vào kích thước ảnh cover."
+              message="Lưu Ý"
+              description="Text sẽ được encode UTF-8 → binary → nhúng vào channel Blue của ảnh. Dung lượng text phụ thuộc vào kích thước ảnh cover."
               type="info"
               icon={<InfoCircleOutlined />}
               style={{ marginBottom: 16 }}
@@ -268,7 +278,7 @@ export default function EmbedPage() {
               loading={isProcessing}
               block
             >
-              {isProcessing ? 'Đang xử lý...' : 'Embed Text vào Image'}
+              {isProcessing ? 'Đang xử lý...' : 'Nhúng Text vào Ảnh'}
             </Button>
           </Card>
         </Col>
@@ -279,7 +289,7 @@ export default function EmbedPage() {
             <>
               {/* Stego Image Result */}
               <Card 
-                title="🖼️ Stego Image Result" 
+                title="🖼️ Kết Quả Ảnh Stego" 
                 style={{ marginBottom: 24 }}
                 extra={
                   <Button
@@ -287,14 +297,14 @@ export default function EmbedPage() {
                     icon={<DownloadOutlined />}
                     onClick={downloadStegoImage}
                   >
-                    Download
+                    Tải Xuống
                   </Button>
                 }
               >
                 <div style={{ textAlign: 'center', marginBottom: 16 }}>
                   <Image
                     src={`data:image/png;base64,${results.stegoImage}`}
-                    alt="Stego Image"
+                    alt="Ảnh Stego"
                     style={{ maxWidth: '100%', maxHeight: '300px' }}
                     fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBSWpFCYh2zi+oLMpMzyhRcASGUqqCZ16yno6CkYGRAQMDKMwhqj/fAIcloxgHQqxAjIHBEugw5sUIsSQpBobtQPdLciLEVJYzMPBHMDBsayhILEqEO4DxG0txmrERhM29nYGBddr//5/DGRjYNRkY/l7////39v///y4Dmn+LgeHANwDrkl1AuO+pmgAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAwqADAAQAAAABAAAAwwAAAAD9b/HnAAAHlklEQVR4Ae3dP3Ik1xkE8Cb+"
                   />
@@ -305,10 +315,10 @@ export default function EmbedPage() {
               </Card>
 
               {/* Metrics */}
-              <Card title="📊 Quality Metrics">
+              <Card title="📊 Chỉ Số Chất Lượng">
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <div>
-                    <Text strong>PSNR (Peak Signal-to-Noise Ratio): </Text>
+                    <Text strong>PSNR (Tỷ Lệ Tín Hiệu-Nhiễu Đỉnh): </Text>
                     <Text type="success">{results.metrics.psnr} dB</Text>
                     <br />
                     <Text type="secondary" style={{ fontSize: '12px' }}>
@@ -317,7 +327,7 @@ export default function EmbedPage() {
                   </div>
 
                   <div>
-                    <Text strong>SSIM (Structural Similarity): </Text>
+                    <Text strong>SSIM (Độ Tương Đồng Cấu Trúc): </Text>
                     <Text type="success">{results.metrics.ssim}</Text>
                     <br />
                     <Text type="secondary" style={{ fontSize: '12px' }}>
@@ -328,62 +338,132 @@ export default function EmbedPage() {
                   <Divider />
 
                   <div>
-                    <Text strong>Text Length: </Text>
-                    <Text>{results.metrics.textLength} characters</Text>
+                    <Text strong>Độ Dài Text: </Text>
+                    <Text>{results.metrics.textLength} ký tự</Text>
                   </div>
 
                   <div>
-                    <Text strong>Binary Length: </Text>
-                    <Text>{results.metrics.binaryLength} bits</Text>
+                    <Text strong>Độ Dài Binary: </Text>
+                    <Text>{results.metrics.binaryLength} bit</Text>
                   </div>
 
                   <div>
-                    <Text strong>Image Size: </Text>
+                    <Text strong>Kích Thước Ảnh: </Text>
                     <Text>{results.metrics.imageSize}</Text>
                   </div>
                 </Space>
               </Card>
 
               {/* Algorithm Info */}
-              <Card title="🔬 Algorithm Details" style={{ marginTop: 16 }}>
+              <Card title="🔬 Chi Tiết Thuật Toán" style={{ marginTop: 16 }}>
                 <Space direction="vertical" style={{ width: '100%' }}>
                   <div>
-                    <Text strong>Method: </Text>
+                    <Text strong>Phương Pháp: </Text>
                     <Text>{results.algorithm.name}</Text>
                   </div>
                   
                   <div>
-                    <Text strong>Complexity Analysis: </Text>
+                    <Text strong>Phân Tích Độ Phức Tạp: </Text>
                     <Text>{results.algorithm.complexity_method}</Text>
                   </div>
                   
                   <div>
-                    <Text strong>Embedding Strategy: </Text>
+                    <Text strong>Chiến Lược Nhúng: </Text>
                     <Text>{results.algorithm.embedding_strategy}</Text>
                   </div>
                   
                   <div>
-                    <Text strong>Channel: </Text>
+                    <Text strong>Kênh Màu: </Text>
                     <Text>{results.algorithm.channel}</Text>
+                  </div>
+                  
+                  <div>
+                    <Text strong>Xử Lý Dữ Liệu: </Text>
+                    <Text>{results.algorithm.data_processing}</Text>
+                  </div>
+                </Space>
+              </Card>
+
+              {/* Capacity Analysis */}
+              <Card title="📊 Phân Tích Dung Lượng" style={{ marginTop: 16 }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <div>
+                    <Text strong>Dung Lượng Tối Đa: </Text>
+                    <Text type="success">{results.metrics.capacityInfo.total_bytes} bytes</Text>
+                  </div>
+                  
+                  <div>
+                    <Text strong>Bits Per Pixel: </Text>
+                    <Text type="secondary">{results.metrics.capacityInfo.bits_per_pixel}</Text>
+                  </div>
+                  
+                  <div>
+                    <Text strong>Vùng Đơn Giản (1-bit): </Text>
+                    <Text>{results.metrics.capacityInfo.low_complexity_percentage.toFixed(1)}%</Text>
+                  </div>
+                  
+                  <div>
+                    <Text strong>Vùng Phức Tạp (2-bit): </Text>
+                    <Text>{results.metrics.capacityInfo.high_complexity_percentage.toFixed(1)}%</Text>
+                  </div>
+                  
+                  <div>
+                    <Text strong>Ngưỡng Complexity: </Text>
+                    <Text>{results.metrics.capacityInfo.threshold}</Text>
+                  </div>
+                </Space>
+              </Card>
+
+              {/* Visualizations */}
+              <Card title="🖼️ Phân Tích Hình Ảnh" style={{ marginTop: 16 }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <div>
+                    <Text strong>Complexity Map:</Text>
+                    <div style={{ textAlign: 'center', marginTop: 8 }}>
+                      <Image
+                        src={`data:image/png;base64,${results.complexityMap}`}
+                        alt="Complexity Map"
+                        style={{ maxWidth: '100%', maxHeight: '150px' }}
+                      />
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        Dark = đơn giản, Bright = phức tạp
+                      </Text>
+              </div>
+            </div>
+
+                  <Divider />
+                  
+                  <div>
+                    <Text strong>Embedding Mask:</Text>
+                    <div style={{ textAlign: 'center', marginTop: 8 }}>
+                      <Image
+                        src={`data:image/png;base64,${results.embeddingMask}`}
+                        alt="Embedding Mask"
+                        style={{ maxWidth: '100%', maxHeight: '150px' }}
+                      />
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        White = 2-bit LSB, Gray = 1-bit LSB
+                      </Text>
+                    </div>
                   </div>
                 </Space>
               </Card>
             </>
           ) : (
             /* Placeholder when no results */
-            <Card title="📊 Results" style={{ textAlign: 'center', minHeight: '400px' }}>
+            <Card title="📊 Kết Quả" style={{ textAlign: 'center', minHeight: '400px' }}>
               <div style={{ padding: '60px 20px' }}>
                 <Text type="secondary" style={{ fontSize: '16px' }}>
-                  Upload ảnh cover và nhập text để bắt đầu
+                  Tải lên ảnh cover và nhập text để bắt đầu
                 </Text>
                 <br />
                 <br />
                 <Text type="secondary">
-                  Kết quả embed sẽ hiển thị ở đây
+                  Kết quả nhúng sẽ hiển thị ở đây
                 </Text>
               </div>
             </Card>
-          )}
+            )}
         </Col>
       </Row>
     </div>
