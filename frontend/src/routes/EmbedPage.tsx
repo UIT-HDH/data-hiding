@@ -11,85 +11,97 @@ import {
   Image,
   Space,
   Alert,
-  Divider
+  Divider,
+  Statistic,
+  Progress,
+  Tabs
 } from 'antd'
 import {
   InboxOutlined,
   PlayCircleOutlined,
   DownloadOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  EyeOutlined,
+  BarChartOutlined
 } from '@ant-design/icons'
 import { http } from '../services/http'
 
 const { Dragger } = Upload
 const { TextArea } = Input
 const { Text, Title } = Typography
+const { TabPane } = Tabs
 
 /**
- * Interface cho kết quả từ Simple Backend API
+ * Enhanced Interface cho Backend API Response
  */
-interface SimpleEmbedResult {
-  stegoImage: string // Base64 encoded PNG
-  complexityMap: string // Base64 encoded complexity map
-  embeddingMask: string // Base64 encoded embedding mask
+interface EmbedResult {
+  stegoImage: string
+  complexityMap: string
+  embeddingMask: string
   metrics: {
     psnr: number
     ssim: number
-    textLength: number
-    binaryLength: number
-    imageSize: string
-    capacityInfo: {
-      total_bytes: number
-      bits_per_pixel: number
-      low_complexity_percentage: number
-      high_complexity_percentage: number
-      threshold: number
-    }
+    text_length_chars: number
+    text_length_bytes: number
+    binary_length_bits: number
+    image_size: string
   }
-  algorithm: {
-    name: string
-    complexity_method: string
-    embedding_strategy: string
-    channel: string
+  embeddingInfo: {
+    total_capacity: number
+    data_embedded: number
+    utilization: number
+    complexity_threshold: number
+    algorithm: string
+  }
+  capacityAnalysis: {
+    total_capacity_bits: number
+    total_capacity_bytes: number
+    total_capacity_chars: number
+    average_bpp: number
+    high_complexity_blocks: number
+    low_complexity_blocks: number
+    total_blocks: number
+    complexity_threshold: number
+    high_complexity_percentage: number
+    low_complexity_percentage: number
+    utilization_1bit: number
+    utilization_2bit: number
+  }
+  algorithmInfo: {
+    method: string
+    complexity_analysis: string
+    adaptive_strategy: string
+    embedding_domain: string
     data_processing: string
   }
+  processingTime: number
+  timestamp: string
 }
 
 /**
- * EmbedPage - Phiên bản đơn giản
- * 
- * Chức năng:
- * 1. Upload ảnh cover (PNG/JPG)
- * 2. Nhập text cần giấu
- * 3. Gọi API /embed từ simple_backend.py
- * 4. Hiển thị ảnh stego + metrics + download
- * 
- * Thuật toán: Sobel Edge Detection + Adaptive LSB (1-2 bit)
+ * EmbedPage Enhanced - Academic Version
+ * Đồ án môn học: Data Hiding với Adaptive LSB Steganography
  */
-export default function EmbedPage() {
+export default function EmbedPageEnhanced() {
   // =============================================================================
-  // State Management
+  // State Management  
   // =============================================================================
   const [coverFile, setCoverFile] = React.useState<File | null>(null)
   const [coverPreview, setCoverPreview] = React.useState<string>('')
   const [secretText, setSecretText] = React.useState<string>('')
   const [isProcessing, setIsProcessing] = React.useState<boolean>(false)
-  const [results, setResults] = React.useState<SimpleEmbedResult | null>(null)
+  const [results, setResults] = React.useState<EmbedResult | null>(null)
 
   // =============================================================================
   // Helper Functions
   // =============================================================================
 
-  /**
-   * Xử lý upload ảnh cover
-   */
   const handleCoverUpload = (info: any) => {
     const { file } = info
     if (file.status !== 'uploading') {
       const uploadedFile = file.originFileObj || file
       setCoverFile(uploadedFile)
-      
-      // Tạo preview
+
       const reader = new FileReader()
       reader.onload = (e) => {
         setCoverPreview(e.target?.result as string)
@@ -98,23 +110,13 @@ export default function EmbedPage() {
     }
   }
 
-  /**
-   * Download ảnh stego từ base64
-   */
   const downloadStegoImage = () => {
     if (!results?.stegoImage) return
-    
+
     try {
-      // Convert base64 to blob
-      const byteCharacters = atob(results.stegoImage)
-      const byteNumbers = new Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
-      }
-      const byteArray = new Uint8Array(byteNumbers)
+      const base64Data = results.stegoImage.replace(/^data:image\/[^;]+;base64,/, '')
+      const byteArray = new Uint8Array(atob(base64Data).split('').map(char => char.charCodeAt(0)))
       const blob = new Blob([byteArray], { type: 'image/png' })
-      
-      // Tạo download link
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -123,150 +125,252 @@ export default function EmbedPage() {
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
-      message.success('Đã tải xuống ảnh stego!')
+      message.success('🎉 Stego image downloaded!')
     } catch (error) {
-      message.error('Lỗi khi tải xuống ảnh')
+      message.error('❌ Download failed')
     }
   }
 
-  /**
-   * Kiểm tra có thể embed không
-   */
   const canEmbed = coverFile && secretText.trim().length > 0 && !isProcessing
 
-  // =============================================================================
-  // Main Embed Function
-  // =============================================================================
-
-  /**
-   * Gọi API embed từ simple_backend.py
-   */
   const handleEmbed = async () => {
     if (!canEmbed) return
-    
+
     setIsProcessing(true)
     setResults(null)
 
     try {
-      // Tạo FormData cho multipart/form-data
       const formData = new FormData()
       formData.append('coverImage', coverFile!)
       formData.append('secretText', secretText)
 
-      console.log('📤 Sending embed request...')
-      console.log('Cover image:', coverFile!.name, coverFile!.size, 'bytes')
-      console.log('Secret text length:', secretText.length, 'characters')
-
-      // Gọi API simple_backend
-      const response = await http.post('/embed', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+      const response = await http.post('/api/v1/embed', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
 
       if (response.data.success) {
         setResults(response.data.data)
-        message.success('✅ Nhúng dữ liệu thành công!')
-        console.log('✅ Embed successful:', response.data.data)
+        message.success('✅ Text embedded successfully!')
       } else {
-        throw new Error(response.data.message || 'Embed failed')
+        throw new Error(response.data.message || 'Embedding failed')
       }
-
     } catch (error: any) {
-      console.error('❌ Embed error:', error)
-      
-      if (error.message) {
-        message.error(`Lỗi: ${error.message}`)
-      } else if (error.response?.data?.detail) {
-        message.error(`Lỗi: ${error.response.data.detail}`)
-      } else {
-      message.error('Có lỗi xảy ra khi nhúng dữ liệu')
-      }
+      console.error('Embed error:', error)
+      const errorMsg = error.response?.data?.detail || error.message || 'Network error occurred'
+      message.error(`❌ ${errorMsg}`)
     } finally {
       setIsProcessing(false)
     }
   }
 
   // =============================================================================
-  // Render UI
+  // Render Functions
+  // =============================================================================
+
+  const renderMetricsCard = () => (
+    <Card title="📊 Quality Metrics" size="small">
+      <Row gutter={[16, 16]}>
+        <Col span={12}>
+          <Statistic
+            title="PSNR"
+            value={results?.metrics.psnr}
+            precision={2}
+            suffix="dB"
+          />
+        </Col>
+        <Col span={12}>
+          <Statistic
+            title="SSIM"
+            value={results?.metrics.ssim}
+            precision={4}
+          />
+        </Col>
+        <Col span={12}>
+          <Statistic
+            title="Text Length"
+            value={results?.metrics.text_length_chars}
+            suffix="chars"
+          />
+        </Col>
+        <Col span={12}>
+          <Statistic
+            title="Processing Time"
+            value={results?.processingTime}
+            precision={3}
+            suffix="s"
+          />
+        </Col>
+      </Row>
+    </Card>
+  )
+
+  const renderCapacityCard = () => (
+    <Card title="🔢 Capacity Analysis" size="small">
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <div>
+          <Text strong>Total Capacity: </Text>
+          <Text>{results?.capacityAnalysis.total_capacity_bytes} bytes ({results?.capacityAnalysis.total_capacity_bits} bits)</Text>
+        </div>
+        <div>
+          <Text strong>Utilization: </Text>
+          <Progress
+            percent={results?.embeddingInfo.utilization}
+            size="small"
+            format={(percent) => `${percent?.toFixed(1)}%`}
+          />
+        </div>
+        <div>
+          <Text strong>Average BPP: </Text>
+          <Text type="secondary">{results?.capacityAnalysis.average_bpp?.toFixed(4)}</Text>
+        </div>
+        <Divider style={{ margin: '8px 0' }} />
+        <Row gutter={16}>
+          <Col span={12}>
+            <Text strong>High Complexity:</Text>
+            <br />
+            <Text>{results?.capacityAnalysis.high_complexity_percentage?.toFixed(1)}%</Text>
+            <br />
+            <Text type="secondary">({results?.capacityAnalysis.high_complexity_blocks} blocks, 2-bit)</Text>
+          </Col>
+          <Col span={12}>
+            <Text strong>Low Complexity:</Text>
+            <br />
+            <Text>{results?.capacityAnalysis.low_complexity_percentage?.toFixed(1)}%</Text>
+            <br />
+            <Text type="secondary">({results?.capacityAnalysis.low_complexity_blocks} blocks, 1-bit)</Text>
+          </Col>
+        </Row>
+      </Space>
+    </Card>
+  )
+
+  const renderVisualizationsCard = () => (
+    <Card title="🎨 Algorithm Visualizations" size="small">
+      <Tabs defaultActiveKey="complexity">
+        <TabPane tab="🔥 Complexity Map" key="complexity">
+          <div style={{ textAlign: 'center' }}>
+            <Image
+              src={results?.complexityMap}
+              alt="Complexity Map"
+              style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain' }}
+            />
+            <div style={{ marginTop: '8px' }}>
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                🔴 Red: High complexity (2-bit LSB) • 🔵 Blue: Low complexity (1-bit LSB)
+              </Text>
+            </div>
+          </div>
+        </TabPane>
+        <TabPane tab="🎯 Embedding Mask" key="mask">
+          <div style={{ textAlign: 'center' }}>
+            <Image
+              src={results?.embeddingMask}
+              alt="Embedding Mask"
+              style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain' }}
+            />
+            <div style={{ marginTop: '8px' }}>
+              <Text type="secondary" style={{ fontSize: '12px' }}>
+                🟢 Green: 1-bit embedding • 🟡 Yellow: 2-bit embedding • ⚫ Black: No embedding
+              </Text>
+            </div>
+          </div>
+        </TabPane>
+      </Tabs>
+    </Card>
+  )
+
+  const renderAlgorithmCard = () => (
+    <Card title="🔬 Algorithm Information" size="small">
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <div>
+          <Text strong>Method: </Text>
+          <Text>{results?.algorithmInfo.method}</Text>
+        </div>
+        <div>
+          <Text strong>Complexity Analysis: </Text>
+          <Text>{results?.algorithmInfo.complexity_analysis}</Text>
+        </div>
+        <div>
+          <Text strong>Adaptive Strategy: </Text>
+          <Text>{results?.algorithmInfo.adaptive_strategy}</Text>
+        </div>
+        <div>
+          <Text strong>Embedding Domain: </Text>
+          <Text>{results?.algorithmInfo.embedding_domain}</Text>
+        </div>
+        <div>
+          <Text strong>Data Processing: </Text>
+          <Text>{results?.algorithmInfo.data_processing}</Text>
+        </div>
+        <Divider style={{ margin: '8px 0' }} />
+        <Text type="secondary" style={{ fontSize: '12px' }}>
+          🕒 Processed at: {results?.timestamp ? new Date(results.timestamp).toLocaleString() : 'N/A'}
+        </Text>
+      </Space>
+    </Card>
+  )
+
+  // =============================================================================
+  // Main Render
   // =============================================================================
 
   return (
-    <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      {/* Header */}
-      <Card style={{ marginBottom: 24 }}>
-        <Title level={2}>
-          🔒 Steganography - Nhúng Dữ Liệu
-        </Title>
-        <Text type="secondary">
-          Giấu text vào ảnh bằng thuật toán <strong>Sobel Edge Detection + Adaptive LSB</strong>
-        </Text>
-        <br />
-        <Text type="secondary">
-          Vùng phẳng: 1-bit LSB | Vùng phức tạp: 2-bit LSB | Channel: Blue (ít nhạy cảm nhất)
-        </Text>
-      </Card>
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <Title level={2}>📚 Xử lý nhúng</Title>
+
+      <Alert
+        message="🔬 Algorithm: Sobel Edge Detection + Adaptive LSB (1-2 bit)"
+        description="Thuật toán nhúng thích ứng: vùng phẳng dùng 1-bit LSB, vùng phức tạp dùng 2-bit LSB"
+        type="info"
+        showIcon
+        style={{ marginBottom: '20px' }}
+      />
 
       <Row gutter={[24, 24]}>
-        {/* Left Column: Input */}
-        <Col xs={24} lg={12}>
-          {/* Upload Cover Image */}
-          <Card title="📁 Tải Lên Ảnh Cover" style={{ marginBottom: 24 }}>
+        {/* ===== INPUT SECTION ===== */}
+        <Col span={24} lg={12}>
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            {/* Upload Cover Image */}
+            <Card title="🖼️ Upload Cover Image" size="small">
               <Dragger
-              name="coverImage"
-              multiple={false}
-              accept="image/*"
-              beforeUpload={() => false} // Prevent auto upload
+                accept="image/*"
+                showUploadList={false}
+                customRequest={({ file, onSuccess }) => {
+                  setTimeout(() => {
+                    onSuccess && onSuccess('ok')
+                  }, 0)
+                }}
                 onChange={handleCoverUpload}
-              style={{ marginBottom: 16 }}
               >
-                <p className="ant-upload-drag-icon">
-                  <InboxOutlined />
-                </p>
-                <p className="ant-upload-text">
-                Kéo thả ảnh vào đây hoặc click để chọn
-                </p>
-                <p className="ant-upload-hint">
-                Hỗ trợ: PNG, JPG, JPEG
-                </p>
+                {coverPreview ? (
+                  <Image
+                    src={coverPreview}
+                    alt="Cover preview"
+                    style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain' }}
+                  />
+                ) : (
+                  <div style={{ padding: '20px' }}>
+                    <p className="ant-upload-drag-icon">
+                      <InboxOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
+                    </p>
+                    <p className="ant-upload-text">Click or drag image file to upload</p>
+                    <p className="ant-upload-hint">Support PNG, JPG, JPEG formats</p>
+                  </div>
+                )}
               </Dragger>
-              
-            {coverPreview && (
-              <div style={{ textAlign: 'center' }}>
-                <Image
-                  src={coverPreview}
-                  alt="Xem Trước Ảnh Cover"
-                  style={{ maxWidth: '100%', maxHeight: '200px' }}
-                />
-                <div style={{ marginTop: 8 }}>
-                  <Text type="secondary">
-                    {coverFile?.name} ({Math.round((coverFile?.size || 0) / 1024)} KB)
-                  </Text>
-                </div>
-              </div>
-            )}
-          </Card>
+            </Card>
 
-          {/* Secret Text Input */}
-          <Card title="✏️ Nhập Secret Text">
-            <TextArea
-              placeholder="Nhập text cần giấu vào ảnh..."
-              value={secretText}
-              onChange={(e) => setSecretText(e.target.value)}
-              rows={6}
-              showCount
-              maxLength={1000}
-              style={{ marginBottom: 16 }}
-            />
-            
-            <Alert
-              message="Lưu Ý"
-              description="Text sẽ được encode UTF-8 → binary → nhúng vào channel Blue của ảnh. Dung lượng text phụ thuộc vào kích thước ảnh cover."
-              type="info"
-              icon={<InfoCircleOutlined />}
-              style={{ marginBottom: 16 }}
-            />
+            {/* Secret Text Input */}
+            <Card title="✍️ Secret Text" size="small">
+              <TextArea
+                value={secretText}
+                onChange={(e) => setSecretText(e.target.value)}
+                placeholder="Enter text to hide in the image..."
+                rows={4}
+                showCount
+                maxLength={1000}
+              />
+            </Card>
 
             {/* Embed Button */}
             <Button
@@ -276,196 +380,72 @@ export default function EmbedPage() {
               onClick={handleEmbed}
               disabled={!canEmbed}
               loading={isProcessing}
-              block
+              style={{ width: '100%', height: '50px', fontSize: '16px' }}
             >
-              {isProcessing ? 'Đang xử lý...' : 'Nhúng Text vào Ảnh'}
+              {isProcessing ? 'Processing...' : 'Embed Text into Image'}
             </Button>
-          </Card>
+          </Space>
         </Col>
 
-        {/* Right Column: Results */}
-        <Col xs={24} lg={12}>
+        {/* ===== RESULTS SECTION ===== */}
+        <Col span={24} lg={12}>
           {results ? (
-            <>
-              {/* Stego Image Result */}
-              <Card 
-                title="🖼️ Kết Quả Ảnh Stego" 
-                style={{ marginBottom: 24 }}
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+              {/* Stego Image */}
+              <Card
+                title="🖼️ Stego Image"
+                size="small"
                 extra={
                   <Button
                     type="primary"
                     icon={<DownloadOutlined />}
                     onClick={downloadStegoImage}
+                    size="small"
                   >
-                    Tải Xuống
+                    Download
                   </Button>
                 }
               >
-                <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                  <Image
-                    src={`data:image/png;base64,${results.stegoImage}`}
-                    alt="Ảnh Stego"
-                    style={{ maxWidth: '100%', maxHeight: '300px' }}
-                    fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBSWpFCYh2zi+oLMpMzyhRcASGUqqCZ16yno6CkYGRAQMDKMwhqj/fAIcloxgHQqxAjIHBEugw5sUIsSQpBobtQPdLciLEVJYzMPBHMDBsayhILEqEO4DxG0txmrERhM29nYGBddr//5/DGRjYNRkY/l7////39v///y4Dmn+LgeHANwDrkl1AuO+pmgAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAwqADAAQAAAABAAAAwwAAAAD9b/HnAAAHlklEQVR4Ae3dP3Ik1xkE8Cb+"
-                  />
-                </div>
-                <Text type="secondary">
-                  Ảnh stego đã được tạo với text được nhúng bằng Adaptive LSB
-                </Text>
+                <Image
+                  src={results.stegoImage}
+                  alt="Stego Image"
+                  style={{ width: '100%', maxHeight: '300px', objectFit: 'contain' }}
+                />
               </Card>
 
               {/* Metrics */}
-              <Card title="📊 Chỉ Số Chất Lượng">
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <div>
-                    <Text strong>PSNR (Tỷ Lệ Tín Hiệu-Nhiễu Đỉnh): </Text>
-                    <Text type="success">{results.metrics.psnr} dB</Text>
-                    <br />
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                      Chất lượng ảnh (càng cao càng tốt, lớn hơn 40dB = tốt)
-                    </Text>
-                  </div>
-
-                  <div>
-                    <Text strong>SSIM (Độ Tương Đồng Cấu Trúc): </Text>
-                    <Text type="success">{results.metrics.ssim}</Text>
-                    <br />
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
-                      Độ tương đồng cấu trúc (0-1, càng gần 1 càng tốt)
-                    </Text>
-                  </div>
-
-                  <Divider />
-
-                  <div>
-                    <Text strong>Độ Dài Text: </Text>
-                    <Text>{results.metrics.textLength} ký tự</Text>
-                  </div>
-
-                  <div>
-                    <Text strong>Độ Dài Binary: </Text>
-                    <Text>{results.metrics.binaryLength} bit</Text>
-                  </div>
-
-                  <div>
-                    <Text strong>Kích Thước Ảnh: </Text>
-                    <Text>{results.metrics.imageSize}</Text>
-                  </div>
-                </Space>
-              </Card>
-
-              {/* Algorithm Info */}
-              <Card title="🔬 Chi Tiết Thuật Toán" style={{ marginTop: 16 }}>
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <div>
-                    <Text strong>Phương Pháp: </Text>
-                    <Text>{results.algorithm.name}</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Phân Tích Độ Phức Tạp: </Text>
-                    <Text>{results.algorithm.complexity_method}</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Chiến Lược Nhúng: </Text>
-                    <Text>{results.algorithm.embedding_strategy}</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Kênh Màu: </Text>
-                    <Text>{results.algorithm.channel}</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Xử Lý Dữ Liệu: </Text>
-                    <Text>{results.algorithm.data_processing}</Text>
-                  </div>
-                </Space>
-              </Card>
-
-              {/* Capacity Analysis */}
-              <Card title="📊 Phân Tích Dung Lượng" style={{ marginTop: 16 }}>
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <div>
-                    <Text strong>Dung Lượng Tối Đa: </Text>
-                    <Text type="success">{results.metrics.capacityInfo.total_bytes} bytes</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Bits Per Pixel: </Text>
-                    <Text type="secondary">{results.metrics.capacityInfo.bits_per_pixel}</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Vùng Đơn Giản (1-bit): </Text>
-                    <Text>{results.metrics.capacityInfo.low_complexity_percentage.toFixed(1)}%</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Vùng Phức Tạp (2-bit): </Text>
-                    <Text>{results.metrics.capacityInfo.high_complexity_percentage.toFixed(1)}%</Text>
-                  </div>
-                  
-                  <div>
-                    <Text strong>Ngưỡng Complexity: </Text>
-                    <Text>{results.metrics.capacityInfo.threshold}</Text>
-                  </div>
-                </Space>
-              </Card>
-
-              {/* Visualizations */}
-              <Card title="🖼️ Phân Tích Hình Ảnh" style={{ marginTop: 16 }}>
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  <div>
-                    <Text strong>Complexity Map:</Text>
-                    <div style={{ textAlign: 'center', marginTop: 8 }}>
-                      <Image
-                        src={`data:image/png;base64,${results.complexityMap}`}
-                        alt="Complexity Map"
-                        style={{ maxWidth: '100%', maxHeight: '150px' }}
-                      />
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        Dark = đơn giản, Bright = phức tạp
-                      </Text>
-              </div>
-            </div>
-
-                  <Divider />
-                  
-                  <div>
-                    <Text strong>Embedding Mask:</Text>
-                    <div style={{ textAlign: 'center', marginTop: 8 }}>
-                      <Image
-                        src={`data:image/png;base64,${results.embeddingMask}`}
-                        alt="Embedding Mask"
-                        style={{ maxWidth: '100%', maxHeight: '150px' }}
-                      />
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        White = 2-bit LSB, Gray = 1-bit LSB
-                      </Text>
-                    </div>
-                  </div>
-                </Space>
-              </Card>
-            </>
+              {renderMetricsCard()}
+            </Space>
           ) : (
-            /* Placeholder when no results */
-            <Card title="📊 Kết Quả" style={{ textAlign: 'center', minHeight: '400px' }}>
+            <Card title="📊 Results" style={{ textAlign: 'center', minHeight: '400px' }}>
               <div style={{ padding: '60px 20px' }}>
                 <Text type="secondary" style={{ fontSize: '16px' }}>
-                  Tải lên ảnh cover và nhập text để bắt đầu
+                  Upload cover image and enter text to begin
                 </Text>
-                <br />
-                <br />
+                <br /><br />
                 <Text type="secondary">
-                  Kết quả nhúng sẽ hiển thị ở đây
+                  Embedding results will appear here
                 </Text>
               </div>
             </Card>
-            )}
+          )}
         </Col>
       </Row>
+
+      {/* ===== DETAILED ANALYSIS (when results available) ===== */}
+      {results && (
+        <Row gutter={[24, 24]} style={{ marginTop: '24px' }}>
+          <Col span={24} lg={12}>
+            {renderCapacityCard()}
+          </Col>
+          <Col span={24} lg={12}>
+            {renderVisualizationsCard()}
+          </Col>
+          <Col span={24}>
+            {renderAlgorithmCard()}
+          </Col>
+        </Row>
+      )}
     </div>
   )
 }

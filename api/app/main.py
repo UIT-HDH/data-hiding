@@ -25,23 +25,11 @@ import uuid
 from typing import Dict, Any
 
 from app.config.settings import get_settings
-from app.core.exceptions import (
-    SteganographyException,
-    FileValidationError,
-    ProcessingError,
-    PayloadTooLargeError
-)
-from app.core.middleware import (
-    RequestLoggingMiddleware,
-    SecurityMiddleware,
-    RateLimitMiddleware
-)
-from app.core.logging import setup_logging, get_logger
+from app.core.exceptions import SteganographyException
 from app.api.v1.router import api_router
 
 
 settings = get_settings()
-logger = get_logger(__name__)
 
 
 @asynccontextmanager

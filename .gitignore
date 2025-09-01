@@ -1,0 +1,426 @@
+# ==============================================================================
+# DATA HIDING PROJECT - COMPREHENSIVE .GITIGNORE
+# Academic Project: Adaptive LSB Steganography with Sobel Edge Detection
+# ==============================================================================
+
+# ==============================
+# OPERATING SYSTEM FILES
+# ==============================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Icon?
+
+# Windows  
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.tmp
+*.temp
+desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==============================
+# PYTHON BACKEND (FastAPI)
+# ==============================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+api/venv/
+api/env/
+api/ENV/
+api/env.bak/
+api/venv.bak/
+.venv/
+.env/
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# ==============================
+# FRONTEND (React + TypeScript + Vite)
+# ==============================
+
+# Dependencies
+frontend/node_modules/
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/lerna-debug.log*
+
+# Build outputs
+frontend/dist/
+frontend/dist-ssr/
+frontend/build/
+
+# Local env files
+frontend/.env
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+frontend/lerna-debug.log*
+
+# Runtime data
+frontend/pids
+frontend/*.pid
+frontend/*.seed
+frontend/*.pid.lock
+
+# Coverage directory used by tools like istanbul
+frontend/coverage/
+frontend/*.lcov
+
+# nyc test coverage
+frontend/.nyc_output
+
+# Dependency directories
+frontend/jspm_packages/
+
+# Snowpack dependency directory (https://snowpack.dev/)
+frontend/web_modules/
+
+# TypeScript cache
+frontend/*.tsbuildinfo
+
+# Optional npm cache directory
+frontend/.npm
+
+# Optional eslint cache
+frontend/.eslintcache
+
+# Optional stylelint cache
+frontend/.stylelintcache
+
+# Microbundle cache
+frontend/.rpt2_cache/
+frontend/.rts2_cache_cjs/
+frontend/.rts2_cache_es/
+frontend/.rts2_cache_umd/
+
+# Optional REPL history
+frontend/.node_repl_history
+
+# Output of 'npm pack'
+frontend/*.tgz
+
+# Yarn Integrity file
+frontend/.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+frontend/.cache
+frontend/.parcel-cache
+
+# Next.js build output
+frontend/.next
+frontend/out
+
+# Nuxt.js build / generate output
+frontend/.nuxt
+frontend/dist
+
+# Gatsby files
+frontend/.cache/
+frontend/public
+
+# Vite
+frontend/.vite
+
+# Rollup.js default build output
+frontend/dist/
+
+# Stores VSCode versions used for testing VSCode extensions
+frontend/.vscode-test
+
+# yarn v2
+frontend/.yarn/cache
+frontend/.yarn/unplugged
+frontend/.yarn/build-state.yml
+frontend/.yarn/install-state.gz
+frontend/.pnp.*
+
+# ==============================
+# PROJECT-SPECIFIC FILES
+# ==============================
+
+# Log files
+*.log
+api/*.log
+frontend/*.log
+api/app/*.log
+
+# Process ID files
+*.pid
+api/*.pid
+frontend/*.pid
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ==============================
+# STEGANOGRAPHY PROJECT SPECIFIC
+# ==============================
+
+# Uploaded images and test files
+api/uploads/
+api/test_images/
+uploads/
+test_images/
+
+# Generated stego images
+*stego*
+*_stego.*
+stego_*.png
+stego_*.jpg
+
+# Analysis outputs
+analysis_output/
+complexity_maps/
+embedding_masks/
+
+# Demo and test files (but keep official test image)
+demo_*.png
+demo_*.jpg
+test_*.png
+test_*.jpg
+!api/test_image.png
+
+# Results and exports
+results/
+exports/
+output/
+
+# Configuration overrides
+config_local.py
+settings_local.py
+
+# ==============================
+# DOCUMENTATION (TEMPORARY/GENERATED)
+# ==============================
+
+# Temporary documentation files (keep main docs)
+*_TEMP.md
+*_OLD.md
+*_BACKUP.md
+TEMP_*.md
+OLD_*.md
+
+# Generated API documentation
+api_docs/
+docs_generated/
+
+# ==============================
+# DEVELOPMENT & DEBUGGING
+# ==============================
+
+# Debug files
+debug.log
+debug_*.log
+*.debug
+
+# Profiling files
+*.prof
+*.profile
+
+# Performance monitoring
+perf.data
+perf.data.old
+
+# Memory dumps
+*.hprof
+*.heap
+
+# ==============================
+# DOCKER (if used later)
+# ==============================
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# ==============================
+# PACKAGE MANAGERS
+# ==============================
+
+# npm
+package-lock.json
+
+# yarn (keep pnpm-lock.yaml for consistency)
+yarn.lock
+
+# ==============================
+# ARCHIVES
+# ==============================
+
+# Compressed files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# ==============================
+# ACADEMIC PROJECT SPECIFIC
+# ==============================
+
+# Presentation files (temporary)
+presentation_draft.pptx
+slides_temp.pdf
+
+# Report drafts
+report_draft.docx
+report_temp.pdf
+
+# Personal notes
+notes.txt
+personal_*.md
+TODO_personal.md
+
+# Screenshots and recordings (large files)
+screenshots/
+recordings/
+screen_*.png
+screen_*.mp4
+demo_*.mp4
+
+# ==============================
+# END OF .GITIGNORE
+# ==============================

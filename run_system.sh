@@ -23,7 +23,7 @@ check_port() {
 # Function to kill existing processes
 kill_existing() {
     echo -e "${YELLOW}🔄 Killing existing processes...${NC}"
-    pkill -f "python.*simple_backend.py" 2>/dev/null || true
+    pkill -f "python.*run_academic_backend.py" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
     sleep 2
 }
@@ -53,7 +53,7 @@ start_backend() {
     
     # Start backend
     echo -e "${GREEN}✅ Starting backend server...${NC}"
-    nohup python3 simple_backend.py > simple_backend.log 2>&1 &
+    nohup python3 run_academic_backend.py > backend.log 2>&1 &
     BACKEND_PID=$!
     echo $BACKEND_PID > backend.pid
     
@@ -154,7 +154,7 @@ stop_services() {
     fi
     
     # Kill any remaining processes
-    pkill -f "python.*simple_backend.py" 2>/dev/null || true
+    pkill -f "python.*run_academic_backend.py" 2>/dev/null || true
     pkill -f "vite" 2>/dev/null || true
     
     echo -e "${GREEN}✅ All services stopped${NC}"
