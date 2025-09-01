@@ -16,6 +16,7 @@ if [ ! -d "api" ] || [ ! -d "frontend" ]; then
     exit 1
 fi
 
+
 # Kill existing processes
 echo -e "${YELLOW}🔄 Stopping existing processes...${NC}"
 pkill -f "start_simple.py" 2>/dev/null || true
