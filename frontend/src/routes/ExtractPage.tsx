@@ -7,9 +7,11 @@ import {
   Form,
   message,
   Typography,
-  Select,
   Row,
   Col,
+  Image,
+  Space,
+  Alert
 } from 'antd'
 import {
   InboxOutlined,
@@ -18,6 +20,7 @@ import {
   CopyOutlined,
   DownloadOutlined,
 } from '@ant-design/icons'
+import { http } from '../services/http'
 
 const { Dragger } = Upload
 const { TextArea } = Input
@@ -26,6 +29,7 @@ const { Text } = Typography
 export default function ExtractPage() {
   const [form] = Form.useForm()
   const [stegoFile, setStegoFile] = React.useState<File | null>(null)
+  const [stegoPreview, setStegoPreview] = React.useState<string>('')
   const [isProcessing, setIsProcessing] = React.useState(false)
   const [results, setResults] = React.useState<any>(null)
 
@@ -34,41 +38,55 @@ export default function ExtractPage() {
   const handleStegoUpload = (info: any) => {
     const { file } = info
     if (file.status !== 'uploading') {
-      setStegoFile(file.originFileObj || file)
+      const uploadedFile = file.originFileObj || file
+      setStegoFile(uploadedFile)
+      
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setStegoPreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(uploadedFile)
     }
   }
 
-  const mockExtract = async () => {
+  const handleExtract = async () => {
     if (!canExtract) return
     
     setIsProcessing(true)
+    setResults(null)
+    
     try {
-      // Mock processing delay
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const formData = new FormData()
+      formData.append('stegoImage', stegoFile!)
       
-      // Mock results - randomly return text or file
-      const isTextResult = Math.random() > 0.5
-      
-      setResults({
-        type: isTextResult ? 'text' : 'file',
-        content: isTextResult 
-          ? 'Đây là nội dung bí mật được giải từ ảnh stego. Lorem ipsum dolor sit amet, consectetur adipiscing elit.'
-          : null,
-        fileName: isTextResult ? null : 'secret_document.txt',
-        fileSize: isTextResult ? null : '1.2 KB',
-        time: '0.8s',
-        success: true,
+      const response = await http.post('/api/v1/extract', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
       
-      message.success('Giải mã dữ liệu thành công!')
-    } catch (error) {
+      if (response.data.success) {
+        setResults({
+          type: 'text',
+          content: response.data.extractedKey,
+          success: true,
+          time: `${response.data.processingTime}s`,
+          imageInfo: response.data.imageInfo
+        })
+        message.success('✅ Giải mã dữ liệu thành công!')
+      } else {
+        throw new Error(response.data.message || 'Extract failed')
+      }
+    } catch (error: any) {
+      console.error('Extract error:', error)
+      const errorMsg = error.response?.data?.detail || error.message || 'Không thể giải mã dữ liệu từ ảnh này'
+      
       setResults({
         type: 'error',
         success: false,
-        message: 'Không thể giải mã dữ liệu từ ảnh này',
-        time: '0.5s',
+        message: errorMsg,
+        time: '0.0s',
       })
-      message.error('Có lỗi xảy ra khi giải mã dữ liệu')
+      message.error(`❌ ${errorMsg}`)
     } finally {
       setIsProcessing(false)
     }
@@ -76,6 +94,7 @@ export default function ExtractPage() {
 
   const handleReset = () => {
     setStegoFile(null)
+    setStegoPreview('')
     setResults(null)
     form.resetFields()
   }
@@ -93,22 +112,17 @@ export default function ExtractPage() {
     }
   }
 
-  const generateSeed = () => {
-    form.setFieldsValue({
-      seed: Math.random().toString(36).substring(2, 10)
-    })
-  }
 
   return (
     <div>
       <Row gutter={[16, 16]}>
         {/* Left Column - Input Form */}
         <Col xs={24} lg={12}>
-          <Card title="Thông Tin Giải Mã" style={{ height: '100%' }}>
+          <Card title="📤 Tải Ảnh Stego" style={{ height: '100%' }}>
             <Form
               form={form}
               layout="vertical"
-              onFinish={mockExtract}
+              onFinish={handleExtract}
             >
               {/* Stego Upload */}
               <Form.Item label="Tải Lên Ảnh Stego" required>
@@ -118,15 +132,30 @@ export default function ExtractPage() {
                   beforeUpload={() => false}
                   onChange={handleStegoUpload}
                 >
-                  <p className="ant-upload-drag-icon">
-                    <InboxOutlined />
-                  </p>
-                  <p className="ant-upload-text">
-                    {stegoFile ? stegoFile.name : 'Click hoặc kéo thả ảnh stego để tải lên'}
-                  </p>
-                  <p className="ant-upload-hint">
-                    Hỗ trợ định dạng PNG, JPG
-                  </p>
+                  {stegoPreview ? (
+                    <div style={{ padding: '10px' }}>
+                      <img
+                        src={stegoPreview}
+                        alt="Stego preview"
+                        style={{ maxWidth: '100%', maxHeight: '200px', objectFit: 'contain', borderRadius: '4px' }}
+                      />
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#666' }}>
+                        📷 {stegoFile?.name}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="ant-upload-drag-icon">
+                        <InboxOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
+                      </p>
+                      <p className="ant-upload-text">
+                        Click hoặc kéo thả ảnh stego để tải lên
+                      </p>
+                      <p className="ant-upload-hint">
+                        Hỗ trợ định dạng PNG, JPG, JPEG
+                      </p>
+                    </>
+                  )}
                 </Dragger>
                 
                 {stegoFile && (
@@ -136,42 +165,6 @@ export default function ExtractPage() {
                 )}
               </Form.Item>
 
-              {/* Password */}
-              <Form.Item 
-                name="password" 
-                label="Mật Khẩu (tùy chọn)"
-              >
-                <Input.Password placeholder="Nhập mật khẩu nếu đã sử dụng khi nhúng dữ liệu" />
-              </Form.Item>
-
-              {/* Seed/PRNG */}
-              <Form.Item 
-                name="seed" 
-                label="Hạt Giống/PRNG"
-              >
-                <Input
-                  placeholder="Nhập hạt giống đã sử dụng khi nhúng dữ liệu"
-                  addonAfter={
-                    <Button type="link" size="small" onClick={generateSeed}>
-                      Tạo
-                    </Button>
-                  }
-                />
-              </Form.Item>
-
-              {/* Domain */}
-              <Form.Item 
-                name="domain" 
-                label="Miền"
-                initialValue="spatial"
-              >
-                <Select
-                  options={[
-                    { label: 'Miền Không Gian', value: 'spatial' },
-                    { label: 'Miền DCT', value: 'dct' },
-                  ]}
-                />
-              </Form.Item>
 
               {/* Action Buttons */}
               <Form.Item>
@@ -181,7 +174,7 @@ export default function ExtractPage() {
                     icon={<PlayCircleOutlined />}
                     loading={isProcessing}
                     disabled={!canExtract}
-                    onClick={mockExtract}
+                    onClick={handleExtract}
                   >
                     Giải Mã
                   </Button>
@@ -196,10 +189,10 @@ export default function ExtractPage() {
 
         {/* Right Column - Results */}
         <Col xs={24} lg={12}>
-          <Card title="Kết Quả" style={{ height: '100%' }}>
+          <Card title="🔓 Kết Quả Giải Mã" style={{ height: '100%' }}>
             {!results ? (
               <div style={{ textAlign: 'center', color: '#999', padding: 40 }}>
-                <Text>Chưa có kết quả. Tải lên ảnh stego và nhấn "Giải Mã" để bắt đầu.</Text>
+                <Text>Chưa có kết quả. Tải ảnh stego và nhấn "Giải Mã" để bắt đầu.</Text>
               </div>
             ) : (
               <>
@@ -210,11 +203,18 @@ export default function ExtractPage() {
 
                 {results.success ? (
                   <>
+                    {/* Image Info */}
+                    {results.imageInfo && (
+                      <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: '6px', fontSize: '12px', color: '#666' }}>
+                        <Text strong>📏 Thông tin ảnh:</Text> {results.imageInfo.size} • <Text strong>📝 Độ dài text:</Text> {results.imageInfo.extractedLength} ký tự
+                      </div>
+                    )}
+                    
                     {/* Text Result */}
                     {results.type === 'text' && (
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                          <Text strong>Nội dung giải được:</Text>
+                          <Text strong>🔓 Nội dung giải được:</Text>
                           <Button
                             type="link"
                             size="small"
@@ -226,10 +226,13 @@ export default function ExtractPage() {
                         </div>
                         <TextArea
                           value={results.content}
-                          rows={8}
+                          rows={6}
                           readOnly
-                          style={{ marginBottom: 16 }}
+                          style={{ marginBottom: 16, fontFamily: 'monospace' }}
                         />
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          ✅ Đã giải mã thành công <Text strong>{results.imageInfo?.extractedLength || results.content?.length || 0}</Text> ký tự từ ảnh stego
+                        </div>
                       </div>
                     )}
 

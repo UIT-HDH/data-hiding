@@ -26,6 +26,8 @@ from typing import Dict, Any
 
 from app.config.settings import get_settings
 from app.core.exceptions import SteganographyException
+from app.core.middleware import RequestLoggingMiddleware, SecurityMiddleware, RateLimitMiddleware
+from app.core.logging import main_logger as logger, setup_logging
 from app.api.v1.router import api_router
 
 

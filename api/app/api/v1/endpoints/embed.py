@@ -67,8 +67,8 @@ async def embed_data(
         if width > 2000 or height > 2000:
             raise HTTPException(status_code=400, detail="Image too large (maximum 2000x2000 pixels)")
         
-        # 4. Simple embedding
-        result = steganography_service.embed_text_simple(cover_image, secretText.strip())
+        # 4. Enhanced embedding với full visualizations
+        result = steganography_service.embed_text_enhanced(cover_image, secretText.strip())
         
         if not result['success']:
             raise HTTPException(status_code=400, detail=result.get('error', 'Embedding failed'))
@@ -76,15 +76,51 @@ async def embed_data(
         # 5. Calculate processing time
         processing_time = round(time.time() - start_time, 3)
         
-        # 6. Simple response
+        # 6. Enhanced response to match frontend EmbedResult interface
         response = {
             'success': True,
-            'stegoImage': f"data:image/png;base64,{result['stego_image_base64']}",
-            'processingTime': processing_time,
-            'embeddingInfo': {
-                'textLength': len(secretText.strip()),
-                'imageSize': f"{width}x{height}",
-                'capacityUsed': result.get('capacity_used', 0)
+            'data': {
+                'stegoImage': f"data:image/png;base64,{result['stego_image_base64']}",
+                'complexityMap': result.get('complexity_map_base64', ''),
+                'embeddingMask': result.get('embedding_mask_base64', ''),
+                'metrics': {
+                    'psnr': result.get('psnr', 0.0),
+                    'ssim': result.get('ssim', 0.0),
+                    'text_length_chars': len(secretText.strip()),
+                    'text_length_bytes': len(secretText.strip().encode('utf-8')),
+                    'binary_length_bits': len(steganography_service.text_to_binary(secretText.strip())),
+                    'image_size': f"{width}x{height}"
+                },
+                'embeddingInfo': {
+                    'total_capacity': result.get('total_capacity', 0),
+                    'data_embedded': result.get('data_embedded', 0),
+                    'utilization': result.get('capacity_used', 0),
+                    'complexity_threshold': result.get('complexity_threshold', 0),
+                    'algorithm': 'Adaptive LSB with Sobel Edge Detection'
+                },
+                'capacityAnalysis': {
+                    'total_capacity_bits': result.get('total_capacity', 0),
+                    'total_capacity_bytes': result.get('total_capacity', 0) // 8,
+                    'total_capacity_chars': result.get('total_capacity', 0) // 8,
+                    'average_bpp': result.get('average_bpp', 1.5),
+                    'high_complexity_blocks': result.get('high_complexity_blocks', 0),
+                    'low_complexity_blocks': result.get('low_complexity_blocks', 0),
+                    'total_blocks': result.get('total_blocks', 0),
+                    'complexity_threshold': result.get('complexity_threshold', 0),
+                    'high_complexity_percentage': result.get('high_complexity_percentage', 0),
+                    'low_complexity_percentage': result.get('low_complexity_percentage', 0),
+                    'utilization_1bit': result.get('utilization_1bit', 0),
+                    'utilization_2bit': result.get('utilization_2bit', 0)
+                },
+                'algorithmInfo': {
+                    'method': 'Adaptive LSB Steganography',
+                    'complexity_analysis': 'Sobel Edge Detection',
+                    'adaptive_strategy': '1-bit LSB for smooth regions, 2-bit LSB for complex regions',
+                    'embedding_domain': 'Spatial Domain (Blue Channel)',
+                    'data_processing': 'UTF-8 encoding with length header and delimiter'
+                },
+                'processingTime': processing_time,
+                'timestamp': datetime.now().isoformat()
             }
         }
         
