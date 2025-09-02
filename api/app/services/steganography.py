@@ -1,19 +1,16 @@
 """
-Core steganography service implementation - Academic Version.
+Simple Steganography Service - Academic Project
 
-Đồ án môn học: Data Hiding với Adaptive LSB Steganography
-Thuật toán: Sobel Edge Detection + Adaptive LSB (1-2 bit)
-
-This module provides:
-- Sobel edge detection for complexity analysis  
-- Adaptive LSB embedding (1-bit for smooth, 2-bit for complex areas)
-- Text-to-binary conversion with proper formatting
-- Quality metrics (PSNR, SSIM)
+Adaptive LSB Steganography with Sobel Edge Detection
+- Optimized for speed and simplicity
+- Focus on core functionality only
+- Clean and minimal implementation
 """
 
 import io
 import base64
 import struct
+import time
 import numpy as np
 from typing import Dict, Any, Optional, Tuple
 from PIL import Image
@@ -21,56 +18,15 @@ from PIL import Image
 
 class SteganographyService:
     """
-    Main steganography service class providing embedding and extraction operations.
+    Simplified steganography service for fast embedding and extraction.
+    
+    Core features:
+    - Adaptive LSB with Sobel edge detection
+    - Text-to-binary conversion with UTF-8 support
+    - Fast embedding and extraction
+    - Minimal overhead and dependencies
     """
     
-    def __init__(self):
-        """Initialize the steganography service."""
-        pass
-    
-    def sobel_edge_detection(self, image_array: np.ndarray) -> np.ndarray:
-        """
-        Phân tích độ phức tạp ảnh bằng Sobel Edge Detection
-        
-        Args:
-            image_array: RGB image array (H, W, 3)
-            
-        Returns:
-            complexity_map: Grayscale complexity map (H, W) - giá trị 0-255
-        """
-        # Chuyển RGB thành Grayscale
-        if len(image_array.shape) == 3:
-            gray = np.dot(image_array[...,:3], [0.299, 0.587, 0.114])
-        else:
-            gray = image_array.copy()
-        
-        # Sobel kernels (3x3)
-        sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
-        sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
-        
-        # Áp dụng convolution
-        h, w = gray.shape
-        grad_x = np.zeros_like(gray, dtype=np.float32)
-        grad_y = np.zeros_like(gray, dtype=np.float32)
-        
-        # Manual convolution với padding
-        padded = np.pad(gray, ((1, 1), (1, 1)), mode='edge')
-        
-        for i in range(h):
-            for j in range(w):
-                region = padded[i:i+3, j:j+3]
-                grad_x[i, j] = np.sum(region * sobel_x)
-                grad_y[i, j] = np.sum(region * sobel_y)
-        
-        # Tính gradient magnitude
-        magnitude = np.sqrt(grad_x**2 + grad_y**2)
-        
-        # Normalize về 0-255
-        if magnitude.max() > 0:
-            magnitude = (magnitude / magnitude.max()) * 255
-        
-        return magnitude.astype(np.uint8)
-
     def text_to_binary(self, text: str) -> str:
         """Chuyển text thành chuỗi binary với format: [32-bit length][UTF-8 bytes][delimiter]"""
         if not text:
@@ -113,14 +69,46 @@ class SteganographyService:
         except Exception:
             return ""
 
-    def adaptive_lsb_embed(self, cover_image: np.ndarray, binary_data: str) -> Tuple[np.ndarray, Dict[str, Any]]:
-        """Thực hiện Adaptive LSB embedding"""
-        h, w, c = cover_image.shape
+    def sobel_edge_detection(self, image: np.ndarray) -> np.ndarray:
+        """Sobel edge detection để tính complexity map"""
+        if len(image.shape) == 3:
+            gray = np.mean(image, axis=2).astype(np.uint8)
+        else:
+            gray = image
         
-        # Tính complexity map
-        complexity_map = self.sobel_edge_detection(cover_image)
+        # Sobel kernels
+        sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
+        sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)
         
-        # Chia thành blocks 2x2
+        h, w = gray.shape
+        grad_x = np.zeros((h, w), dtype=np.float32)
+        grad_y = np.zeros((h, w), dtype=np.float32)
+        
+        # Apply Sobel filters
+        for i in range(1, h-1):
+            for j in range(1, w-1):
+                region = gray[i-1:i+2, j-1:j+2].astype(np.float32)
+                grad_x[i, j] = np.sum(region * sobel_x)
+                grad_y[i, j] = np.sum(region * sobel_y)
+        
+        # Calculate magnitude
+        magnitude = np.sqrt(grad_x**2 + grad_y**2)
+        
+        # Normalize to [0, 255]
+        if magnitude.max() > 0:
+            magnitude = (magnitude / magnitude.max() * 255).astype(np.uint8)
+        
+        return magnitude
+
+    def adaptive_lsb_embed(self, cover: np.ndarray, binary_data: str) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """Adaptive LSB embedding với Sobel edge detection"""
+        h, w, c = cover.shape
+        stego = cover.copy()
+        
+        # Generate complexity map
+        complexity_map = self.sobel_edge_detection(cover)
+        
+        # Calculate complexity threshold
         block_h, block_w = h // 2, w // 2
         block_complexity = np.zeros((block_h, block_w))
         
@@ -129,73 +117,64 @@ class SteganographyService:
                 block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
                 block_complexity[i, j] = np.mean(block_region)
         
-        # Xác định threshold
         complexity_threshold = np.mean(block_complexity)
         
-        # Tạo embedding mask
-        embedding_mask = np.zeros((h, w), dtype=np.uint8)
-        total_capacity = 0
+        # Embed data
+        data_index = 0
+        data_length = len(binary_data)
         
         for i in range(block_h):
             for j in range(block_w):
-                bits_per_pixel = 2 if block_complexity[i, j] > complexity_threshold else 1
-                embedding_mask[i*2:(i+1)*2, j*2:(j+1)*2] = bits_per_pixel
-                total_capacity += bits_per_pixel * 4
-        
-        # Kiểm tra capacity
-        if len(binary_data) > total_capacity:
-            raise ValueError(f"Payload too large: {len(binary_data)} > {total_capacity}")
-        
-        # Thực hiện embedding
-        stego_image = cover_image.copy()
-        data_index = 0
-        
-        for i in range(h):
-            for j in range(w):
-                if data_index >= len(binary_data):
+                if data_index >= data_length:
                     break
-                    
-                bits_to_embed = embedding_mask[i, j]
-                if bits_to_embed == 0:
-                    continue
                 
-                # Lấy bits
-                if data_index + bits_to_embed <= len(binary_data):
-                    data_bits = binary_data[data_index:data_index + bits_to_embed]
-                    data_index += bits_to_embed
-                else:
-                    remaining = len(binary_data) - data_index
-                    data_bits = binary_data[data_index:] + '0' * (bits_to_embed - remaining)
-                    data_index = len(binary_data)
+                # Determine bits per pixel
+                bits_per_pixel = 2 if block_complexity[i, j] > complexity_threshold else 1
                 
-                # Embed vào blue channel
-                blue_value = stego_image[i, j, 2]
-                
-                if bits_to_embed == 1:
-                    new_blue = (blue_value & 0xFE) | int(data_bits[0])
-                else:
-                    new_blue = (blue_value & 0xFC) | int(data_bits, 2)
-                
-                stego_image[i, j, 2] = new_blue
+                # Process block
+                for bi in range(2):
+                    for bj in range(2):
+                        if data_index >= data_length:
+                            break
+                        
+                        pixel_i = i * 2 + bi
+                        pixel_j = j * 2 + bj
+                        
+                        if pixel_i < h and pixel_j < w:
+                            # Embed in blue channel
+                            blue_value = stego[pixel_i, pixel_j, 2]
+                            
+                            # Extract bits to embed
+                            bits_to_embed = binary_data[data_index:data_index + bits_per_pixel]
+                            
+                            if len(bits_to_embed) == bits_per_pixel:
+                                # Clear LSBs and set new bits
+                                if bits_per_pixel == 1:
+                                    blue_value = (blue_value & 0xFE) | int(bits_to_embed[0])
+                                else:  # 2 bits
+                                    blue_value = (blue_value & 0xFC) | int(bits_to_embed, 2)
+                                
+                                stego[pixel_i, pixel_j, 2] = blue_value
+                                data_index += bits_per_pixel
         
+        # Metadata
         metadata = {
-            'total_capacity': total_capacity,
-            'data_embedded': len(binary_data),
-            'utilization': (len(binary_data) / total_capacity) * 100,
-            'complexity_threshold': complexity_threshold,
-            'algorithm': 'Adaptive LSB with Sobel Edge Detection'
+            'data_embedded': data_index,
+            'complexity_threshold': float(complexity_threshold),
+            'total_capacity': block_h * block_w * 4 * 2,  # Rough estimate
+            'bits_embedded': data_index
         }
         
-        return stego_image, metadata
+        return stego, metadata
 
-    def adaptive_lsb_extract(self, stego_image: np.ndarray) -> Tuple[str, Dict[str, Any]]:
-        """Trích xuất dữ liệu từ ảnh stego"""
-        h, w, c = stego_image.shape
+    def adaptive_lsb_extract(self, stego: np.ndarray) -> Tuple[str, Dict[str, Any]]:
+        """Adaptive LSB extraction"""
+        h, w, c = stego.shape
         
-        # Tính lại complexity map
-        complexity_map = self.sobel_edge_detection(stego_image)
+        # Recreate complexity map
+        complexity_map = self.sobel_edge_detection(stego)
         
-        # Tính lại block complexity và embedding mask
+        # Calculate same threshold as embedding
         block_h, block_w = h // 2, w // 2
         block_complexity = np.zeros((block_h, block_w))
         
@@ -205,263 +184,152 @@ class SteganographyService:
                 block_complexity[i, j] = np.mean(block_region)
         
         complexity_threshold = np.mean(block_complexity)
-        embedding_mask = np.zeros((h, w), dtype=np.uint8)
+        
+        # Extract binary string
+        binary_string = ""
         
         for i in range(block_h):
             for j in range(block_w):
+                # Determine bits per pixel
                 bits_per_pixel = 2 if block_complexity[i, j] > complexity_threshold else 1
-                embedding_mask[i*2:(i+1)*2, j*2:(j+1)*2] = bits_per_pixel
-        
-        # Trích xuất bits
-        extracted_bits = []
-        
-        for i in range(h):
-            for j in range(w):
-                bits_to_extract = embedding_mask[i, j]
-                if bits_to_extract == 0:
-                    continue
                 
-                blue_value = stego_image[i, j, 2]
-                
-                if bits_to_extract == 1:
-                    bit = blue_value & 1
-                    extracted_bits.append(str(bit))
-                else:
-                    two_bits = blue_value & 3
-                    extracted_bits.append(format(two_bits, '02b'))
+                # Process block
+                for bi in range(2):
+                    for bj in range(2):
+                        pixel_i = i * 2 + bi
+                        pixel_j = j * 2 + bj
+                        
+                        if pixel_i < h and pixel_j < w:
+                            blue_value = stego[pixel_i, pixel_j, 2]
+                            
+                            if bits_per_pixel == 1:
+                                bit = str(blue_value & 1)
+                                binary_string += bit
+                            else:  # 2 bits
+                                bits = blue_value & 3
+                                binary_string += format(bits, '02b')
         
-        binary_string = ''.join(extracted_bits)
+        # Convert binary to text
         extracted_text = self.binary_to_text(binary_string)
         
         metadata = {
             'bits_extracted': len(binary_string),
-            'complexity_threshold': complexity_threshold,
-            'text_length': len(extracted_text)
+            'complexity_threshold': float(complexity_threshold),
+            'text_length': len(extracted_text) if extracted_text else 0
         }
         
         return extracted_text, metadata
 
-    def calculate_psnr(self, original: np.ndarray, modified: np.ndarray) -> float:
-        """Tính Peak Signal-to-Noise Ratio (PSNR)"""
-        mse = np.mean((original.astype(float) - modified.astype(float)) ** 2)
-        
-        if mse == 0:
-            return float('inf')
-        
-        max_pixel = 255.0
-        psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
-        
-        return round(psnr, 2)
-
-    def calculate_ssim(self, original: np.ndarray, modified: np.ndarray) -> float:
-        """Tính Structural Similarity Index (SSIM)"""
-        # Chuyển thành grayscale
-        if len(original.shape) == 3:
-            orig_gray = np.dot(original[...,:3], [0.299, 0.587, 0.114])
-            mod_gray = np.dot(modified[...,:3], [0.299, 0.587, 0.114])
-        else:
-            orig_gray = original
-            mod_gray = modified
-        
-        # SSIM calculation
-        c1 = (0.01 * 255) ** 2
-        c2 = (0.03 * 255) ** 2
-        
-        mu1 = np.mean(orig_gray)
-        mu2 = np.mean(mod_gray)
-        var1 = np.var(orig_gray)
-        var2 = np.var(mod_gray)
-        cov12 = np.mean((orig_gray - mu1) * (mod_gray - mu2))
-        
-        numerator = (2 * mu1 * mu2 + c1) * (2 * cov12 + c2)
-        denominator = (mu1**2 + mu2**2 + c1) * (var1 + var2 + c2)
-        
-        ssim = numerator / denominator
-        return round(float(ssim), 4)
-
     def image_to_base64(self, image_array: np.ndarray) -> str:
-        """Chuyển numpy array thành base64 string"""
+        """Convert numpy array to base64 string"""
         image = Image.fromarray(image_array.astype(np.uint8))
         buffer = io.BytesIO()
         image.save(buffer, format='PNG')
-        buffer.seek(0)
-        base64_string = base64.b64encode(buffer.getvalue()).decode('utf-8')
-        return base64_string
+        image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        return image_base64
 
-    def generate_complexity_visualization(self, complexity_map: np.ndarray) -> str:
-        """Tạo visualization cho complexity map"""
-        # Normalize complexity map to 0-255 for visualization
-        if complexity_map.max() > 0:
-            normalized = (complexity_map / complexity_map.max() * 255).astype(np.uint8)
-        else:
-            normalized = complexity_map.astype(np.uint8)
+    def embed_text_simple(self, cover_image: Image.Image, secret_text: str) -> Dict[str, Any]:
+        """
+        Simple và nhanh method để embed key/text vào cover image.
         
-        # Create RGB image from grayscale (heatmap effect)
-        height, width = normalized.shape
-        rgb_image = np.zeros((height, width, 3), dtype=np.uint8)
-        
-        # Blue to red heatmap
-        rgb_image[:, :, 0] = normalized  # Red channel
-        rgb_image[:, :, 2] = 255 - normalized  # Blue channel (inverse)
-        
-        return self.image_to_base64(rgb_image)
-
-    def generate_embedding_mask_visualization(self, embedding_mask: np.ndarray) -> str:
-        """Tạo visualization cho embedding mask"""
-        height, width = embedding_mask.shape
-        rgb_image = np.zeros((height, width, 3), dtype=np.uint8)
-        
-        # 1-bit areas = green, 2-bit areas = yellow, no embedding = black
-        mask_1bit = (embedding_mask == 1)
-        mask_2bit = (embedding_mask == 2)
-        
-        rgb_image[mask_1bit] = [0, 255, 0]    # Green for 1-bit areas
-        rgb_image[mask_2bit] = [255, 255, 0]  # Yellow for 2-bit areas
-        
-        return self.image_to_base64(rgb_image)
-
-    def calculate_capacity_analysis(self, image_size: Tuple[int, int], complexity_map: np.ndarray) -> Dict[str, Any]:
-        """Tính toán phân tích capacity chi tiết"""
-        h, w = image_size[1], image_size[0]
-        
-        # Chia thành blocks và tính capacity
-        block_h, block_w = h // 2, w // 2
-        total_capacity_bits = 0
-        total_capacity_bytes = 0
-        high_complexity_blocks = 0
-        low_complexity_blocks = 0
-        
-        # Tính threshold
-        complexity_threshold = np.mean(complexity_map)
-        
-        for i in range(block_h):
-            for j in range(block_w):
-                block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
-                block_complexity = np.mean(block_region)
-                
-                if block_complexity > complexity_threshold:
-                    total_capacity_bits += 8  # 2 bits × 4 pixels
-                    high_complexity_blocks += 1
-                else:
-                    total_capacity_bits += 4  # 1 bit × 4 pixels
-                    low_complexity_blocks += 1
-        
-        total_capacity_bytes = total_capacity_bits // 8
-        total_pixels = h * w
-        average_bpp = total_capacity_bits / total_pixels
-        
-        return {
-            'total_capacity_bits': total_capacity_bits,
-            'total_capacity_bytes': total_capacity_bytes,
-            'total_capacity_chars': total_capacity_bytes,  # Assuming 1 byte per char
-            'average_bpp': round(average_bpp, 4),
-            'high_complexity_blocks': high_complexity_blocks,
-            'low_complexity_blocks': low_complexity_blocks,
-            'total_blocks': high_complexity_blocks + low_complexity_blocks,
-            'complexity_threshold': round(complexity_threshold, 2),
-            'high_complexity_percentage': round((high_complexity_blocks / (high_complexity_blocks + low_complexity_blocks)) * 100, 2),
-            'low_complexity_percentage': round((low_complexity_blocks / (high_complexity_blocks + low_complexity_blocks)) * 100, 2),
-            'utilization_1bit': round((low_complexity_blocks * 4 / total_capacity_bits) * 100, 2),
-            'utilization_2bit': round((high_complexity_blocks * 8 / total_capacity_bits) * 100, 2)
-        }
-
-    def embed_text_in_image(self, cover_image: Image.Image, secret_text: str) -> Dict[str, Any]:
-        """Main function để embed text vào image"""
+        Args:
+            cover_image: PIL Image object làm cover
+            secret_text: Text cần embed
+            
+        Returns:
+            Dictionary với stego image và basic info
+        """
         try:
             cover_array = np.array(cover_image)
             binary_data = self.text_to_binary(secret_text)
             
             if not binary_data:
-                raise ValueError("Failed to convert text to binary")
+                return {
+                    'success': False,
+                    'error': 'Failed to convert text to binary'
+                }
             
-            # Generate complexity map for visualizations
-            complexity_map = self.sobel_edge_detection(cover_array)
-            
+            # Fast embedding without generating complex visualizations
             stego_array, embed_metadata = self.adaptive_lsb_embed(cover_array, binary_data)
             
-            # Calculate metrics
-            psnr = self.calculate_psnr(cover_array, stego_array)
-            ssim = self.calculate_ssim(cover_array, stego_array)
+            # Convert to base64 without extra processing
             stego_base64 = self.image_to_base64(stego_array)
             
-            # Generate visualizations
-            complexity_visualization = self.generate_complexity_visualization(complexity_map)
-            
-            # Create embedding mask for visualization
-            h, w = complexity_map.shape
-            block_h, block_w = h // 2, w // 2
-            embedding_mask = np.zeros((h, w), dtype=np.uint8)
-            complexity_threshold = np.mean(complexity_map)
-            
-            for i in range(block_h):
-                for j in range(block_w):
-                    block_region = complexity_map[i*2:(i+1)*2, j*2:(j+1)*2]
-                    block_complexity = np.mean(block_region)
-                    bits_per_pixel = 2 if block_complexity > complexity_threshold else 1
-                    embedding_mask[i*2:(i+1)*2, j*2:(j+1)*2] = bits_per_pixel
-            
-            embedding_mask_visualization = self.generate_embedding_mask_visualization(embedding_mask)
-            
-            # Calculate capacity analysis
-            capacity_analysis = self.calculate_capacity_analysis(cover_image.size, complexity_map)
+            # Calculate basic capacity info
+            total_capacity = embed_metadata.get('total_capacity', 0)
+            data_embedded = embed_metadata.get('data_embedded', 0)
+            capacity_used = (data_embedded / total_capacity * 100) if total_capacity > 0 else 0
             
             return {
                 'success': True,
                 'stego_image_base64': stego_base64,
-                'complexity_map_base64': complexity_visualization,
-                'embedding_mask_base64': embedding_mask_visualization,
-                'metrics': {
-                    'psnr': psnr,
-                    'ssim': ssim,
-                    'text_length_chars': len(secret_text),
-                    'text_length_bytes': len(secret_text.encode('utf-8')),
-                    'binary_length_bits': len(binary_data),
-                    'image_size': f"{cover_image.size[0]}x{cover_image.size[1]}"
-                },
-                'embedding_info': embed_metadata,
-                'capacity_analysis': capacity_analysis,
-                'algorithm_info': {
-                    'method': 'Adaptive LSB with Sobel Edge Detection',
-                    'complexity_analysis': 'Sobel Gradient Magnitude',
-                    'adaptive_strategy': '1-bit LSB for smooth areas, 2-bit LSB for complex areas',
-                    'embedding_domain': 'Spatial Domain (Blue Channel)',
-                    'data_processing': f"UTF-8 → Binary → LSB Embedding"
+                'capacity_used': round(capacity_used, 2),
+                'embedding_info': {
+                    'text_length': len(secret_text),
+                    'data_embedded_bits': data_embedded,
+                    'capacity_utilization': round(capacity_used, 2)
                 }
             }
             
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e),
-                'error_type': type(e).__name__
+                'error': f'Embedding failed: {str(e)}'
             }
 
-    def extract_text_from_image(self, stego_image: Image.Image) -> Dict[str, Any]:
-        """Main function để extract text từ stego image"""
+    def extract_text_simple(self, stego_image: Image.Image) -> Dict[str, Any]:
+        """
+        Simple và nhanh method để extract key/text từ stego image.
+        
+        Args:
+            stego_image: PIL Image object chứa hidden data
+            
+        Returns:
+            Dictionary với extracted text và basic info
+        """
         try:
+            # Convert image to numpy array
             stego_array = np.array(stego_image)
+            
+            # Fast extraction using existing adaptive LSB method
             extracted_text, extract_metadata = self.adaptive_lsb_extract(stego_array)
+            
+            # Basic validation
+            if not extracted_text:
+                return {
+                    'success': False,
+                    'error': 'No hidden data found in image',
+                    'extracted_text': ''
+                }
+            
+            # Quick quality check
+            is_valid_text = True
+            if len(extracted_text) < 1:
+                is_valid_text = False
+            elif any(ord(c) < 32 and c not in '\t\n\r' for c in extracted_text[:100]):
+                is_valid_text = False
+            
+            if not is_valid_text:
+                return {
+                    'success': False,
+                    'error': 'Extracted data appears corrupted or invalid',
+                    'extracted_text': extracted_text
+                }
             
             return {
                 'success': True,
                 'extracted_text': extracted_text,
-                'extraction_info': extract_metadata,
-                'image_info': {
-                    'size': f"{stego_image.size[0]}x{stego_image.size[1]}",
-                    'mode': stego_image.mode,
-                    'format': stego_image.format or 'Unknown'
-                },
-                'algorithm_info': {
-                    'method': 'Adaptive LSB with Sobel Edge Detection',
-                    'extraction_domain': 'Spatial Domain (Blue Channel)'
+                'extraction_info': {
+                    'bits_extracted': extract_metadata.get('bits_extracted', 0),
+                    'text_length': len(extracted_text)
                 }
             }
             
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e),
-                'error_type': type(e).__name__
+                'error': f'Extraction failed: {str(e)}',
+                'extracted_text': ''
             }
 
 

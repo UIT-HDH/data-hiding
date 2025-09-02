@@ -1,6 +1,6 @@
 """
-Enhanced Embed endpoint for Tab "Embed" functionality.
-Academic project focusing on adaptive steganography with complexity analysis.
+Simple Embed/Extract endpoints for fast steganography operations.
+Academic project focusing on quick key embedding and extraction.
 """
 
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException
@@ -11,6 +11,9 @@ import io
 from datetime import datetime
 
 from app.services.steganography import steganography_service
+from app.config.simple_settings import get_settings
+
+settings = get_settings()
 
 router = APIRouter()
 
@@ -20,43 +23,43 @@ async def embed_data(
     secretText: str = Form(...)
 ) -> dict:
     """
-    Embed secret text into cover image using Adaptive LSB Steganography.
+    Embed key/secret text vào cover image using Adaptive LSB Steganography.
     
-    Academic Implementation:
-    - Sobel Edge Detection for complexity analysis
-    - Adaptive LSB: 1-bit for smooth areas, 2-bit for complex areas
-    - Blue channel embedding in spatial domain
+    Đây là API tối ưu cho tốc độ, tập trung vào:
+    - Input đơn giản: coverImage + secretText
+    - Output tập trung: chỉ stego image + basic info
+    - Performance cao: tối ưu cho tốc độ
+    - Response đơn giản: không có complexity maps, metrics chi tiết
     
     Args:
-        coverImage: Cover image file (PNG, JPG, etc.)
-        secretText: Secret text to embed
+        coverImage: Cover image để embed
+        secretText: Secret text/key cần embed
         
     Returns:
-        Embedding result with stego image and metrics
+        Simple response với stego image
     """
     start_time = time.time()
     
     try:
-        # 1. Validate inputs
+        # 1. Basic input validation
         if not secretText or not secretText.strip():
             raise HTTPException(status_code=400, detail="Secret text cannot be empty")
         
         if not coverImage.content_type or not coverImage.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Please upload a valid image file")
         
-        # 2. Load and validate cover image
+        # 2. Load cover image
         try:
             image_data = await coverImage.read()
             cover_image = Image.open(io.BytesIO(image_data))
             
-            # Convert to RGB if necessary
             if cover_image.mode != 'RGB':
                 cover_image = cover_image.convert('RGB')
                 
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Invalid image: {str(e)}")
         
-        # 3. Validate image size (reasonable limits for academic demo)
+        # 3. Basic size validation
         width, height = cover_image.size
         if width < 50 or height < 50:
             raise HTTPException(status_code=400, detail="Image too small (minimum 50x50 pixels)")
@@ -64,8 +67,8 @@ async def embed_data(
         if width > 2000 or height > 2000:
             raise HTTPException(status_code=400, detail="Image too large (maximum 2000x2000 pixels)")
         
-        # 4. Perform embedding using steganography service
-        result = steganography_service.embed_text_in_image(cover_image, secretText.strip())
+        # 4. Simple embedding
+        result = steganography_service.embed_text_simple(cover_image, secretText.strip())
         
         if not result['success']:
             raise HTTPException(status_code=400, detail=result.get('error', 'Embedding failed'))
@@ -73,20 +76,15 @@ async def embed_data(
         # 5. Calculate processing time
         processing_time = round(time.time() - start_time, 3)
         
-        # 6. Prepare response
+        # 6. Simple response
         response = {
             'success': True,
-            'message': 'Text embedded successfully',
-            'data': {
-                'stegoImage': f"data:image/png;base64,{result['stego_image_base64']}",
-                'complexityMap': f"data:image/png;base64,{result['complexity_map_base64']}",
-                'embeddingMask': f"data:image/png;base64,{result['embedding_mask_base64']}",
-                'metrics': result['metrics'],
-                'embeddingInfo': result['embedding_info'],
-                'capacityAnalysis': result['capacity_analysis'],
-                'algorithmInfo': result['algorithm_info'],
-                'processingTime': processing_time,
-                'timestamp': datetime.now().isoformat()
+            'stegoImage': f"data:image/png;base64,{result['stego_image_base64']}",
+            'processingTime': processing_time,
+            'embeddingInfo': {
+                'textLength': len(secretText.strip()),
+                'imageSize': f"{width}x{height}",
+                'capacityUsed': result.get('capacity_used', 0)
             }
         }
         
@@ -95,7 +93,7 @@ async def embed_data(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
 
 
 @router.post("/extract")
@@ -103,18 +101,24 @@ async def extract_data(
     stegoImage: UploadFile = File(...)
 ) -> dict:
     """
-    Extract secret text from stego image using Adaptive LSB Steganography.
+    Extract key/secret text từ stego image using Adaptive LSB Steganography.
+    
+    Đây là API tối ưu cho tốc độ, tập trung vào:
+    - Input tối giản: chỉ cần stego image
+    - Output tập trung: extracted key/text
+    - Performance cao: tối ưu cho tốc độ
+    - Error handling đơn giản
     
     Args:
-        stegoImage: Stego image file containing hidden data
+        stegoImage: Stego image chứa hidden data/key
         
     Returns:
-        Extraction result with recovered text
+        Simple response với extracted key
     """
     start_time = time.time()
     
     try:
-        # 1. Validate input
+        # 1. Basic input validation
         if not stegoImage.content_type or not stegoImage.content_type.startswith('image/'):
             raise HTTPException(status_code=400, detail="Please upload a valid image file")
         
@@ -123,33 +127,30 @@ async def extract_data(
             image_data = await stegoImage.read()
             stego_image = Image.open(io.BytesIO(image_data))
             
-            # Convert to RGB if necessary
+            # Convert to RGB if needed
             if stego_image.mode != 'RGB':
                 stego_image = stego_image.convert('RGB')
                 
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Invalid image: {str(e)}")
         
-        # 3. Perform extraction using steganography service
-        result = steganography_service.extract_text_from_image(stego_image)
+        # 3. Simple extraction
+        result = steganography_service.extract_text_simple(stego_image)
         
         if not result['success']:
-            raise HTTPException(status_code=400, detail=result.get('error', 'Extraction failed'))
+            raise HTTPException(status_code=400, detail=result.get('error', 'Cannot extract key from image'))
         
         # 4. Calculate processing time
         processing_time = round(time.time() - start_time, 3)
         
-        # 5. Prepare response
+        # 5. Simple response
         response = {
             'success': True,
-            'message': 'Text extracted successfully',
-            'data': {
-                'extractedText': result['extracted_text'],
-                'extractionInfo': result['extraction_info'],
-                'imageInfo': result['image_info'],
-                'algorithmInfo': result['algorithm_info'],
-                'processingTime': processing_time,
-                'timestamp': datetime.now().isoformat()
+            'extractedKey': result['extracted_text'],
+            'processingTime': processing_time,
+            'imageInfo': {
+                'size': f"{stego_image.size[0]}x{stego_image.size[1]}",
+                'extractedLength': len(result['extracted_text']) if result['extracted_text'] else 0
             }
         }
         
@@ -158,16 +159,17 @@ async def extract_data(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
 
 # Health check endpoint
 @router.get("/health")
 async def health_check():
-    """Health check endpoint for embed service"""
+    """Health check endpoint for steganography service"""
     return {
         'status': 'healthy',
-        'service': 'embed',
+        'service': 'steganography',
         'algorithm': 'Adaptive LSB with Sobel Edge Detection',
-        'version': '1.0.0'
+        'version': '1.0.0',
+        'endpoints': ['embed', 'extract']
     }
