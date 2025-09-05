@@ -1,57 +1,41 @@
+// frontend/src/routes/BatchPage.tsx
 import React from 'react';
 import {
   Row, Col, Card, Upload, Button, Input, Typography, Space,
-  Progress, Select, Slider, Switch, Table, Tag, Divider, message
+  Progress, Select, Slider, Switch, Table, Tag, Divider, message, Radio
 } from 'antd';
 import {
   InboxOutlined, PlayCircleOutlined, ReloadOutlined, DownloadOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-// import { http } from '../services/http'; // bật khi nối backend
+import { http } from '../services/http';
 
 const { Dragger } = Upload;
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
-/* ======================= Types ======================= */
-type Method = 'sobel' | 'laplacian' | 'variance' | 'entropy';
 type StatusUnion = 'OK' | 'FAIL';
-
-type BatchConfig = {
-  method: Method;          // Phương pháp phức tạp
-  payloadCap: number;      // 10..90 %
-  seed: string;            // PRNG/seed
-  encrypt: boolean;        // Mã hoá
-  compress: boolean;       // Nén
-};
-
-type BatchItemState = 'queued' | 'running' | 'done' | 'error';
-
-type BatchResult = {
-  key: string;
-  filename: string;
-  sizeKB: number;
-  payloadKB: number;       // “Dữ Liệu”
-  psnr?: number;
-  ssim?: number;
-  timeMs?: number;
-  status: StatusUnion;
-  message?: string;
-};
+type SecretMode = 'text' | 'file';
+type Method = 'sobel' | 'laplacian' | 'variance' | 'entropy';
 
 type RowState = {
   file: File;
   progress: number;
-  state: BatchItemState;
-  result?: BatchResult;
+  state: 'queued' | 'running' | 'done' | 'error';
+  result?: {
+    key: string;
+    filename: string;
+    sizeKB: number;
+    payloadKB: number;
+    psnr?: number;
+    ssim?: number;
+    timeMs?: number;
+    status: StatusUnion;
+    message?: string;
+  };
 };
 
-/* =================== Utils =================== */
-function toStatusUnion(val: unknown): StatusUnion {
-  return String(val).toUpperCase() === 'OK' ? 'OK' : 'FAIL';
-}
-
-function exportCsv(rows: BatchResult[]) {
-  const header = ['TenFile', 'DuLieu(KB)', 'PSNR', 'SSIM', 'ThoiGian(ms)', 'TrangThai', 'GhiChu'];
+function exportCsv(rows: NonNullable<RowState['result']>[]) {
+  const header = ['TenFile','DuLieu(KB)','PSNR','SSIM','ThoiGian(ms)','TrangThai','GhiChu'];
   const csv = [
     header.join(','),
     ...rows.map(r => [
@@ -66,169 +50,221 @@ function exportCsv(rows: BatchResult[]) {
   ].join('\n');
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
   a.href = url; a.download = `batch_results_${Date.now()}.csv`; a.click();
   URL.revokeObjectURL(url);
 }
 
-/* ===== Mock API (thay bằng http.post khi có backend) ===== */
-async function mockEmbedOne(
-  file: File,
-  cfg: BatchConfig,
-  onProgress: (p:number)=>void
-) {
-  let p = 0;
-  while (p < 100) {
-    await new Promise(r => setTimeout(r, 80 + Math.random()*50));
-    p = Math.min(98, p + 6 + Math.random()*10);
-    onProgress(Math.round(p));
-  }
-  const payloadKB = Math.max(0.5, (file.size/1024) * (cfg.payloadCap/100) * 0.02);
-  const psnr = 42 + Math.random()*4;
-  const ssim = 0.975 + Math.random()*0.02;
-  const timeMs = 250 + Math.random()*500;
-  const status = Math.random() > 0.05 ? 'OK' : 'FAIL';
-  return { payloadKB, psnr, ssim, timeMs, status, message: status==='OK'?undefined:'CRC FAIL' };
+/* ===== util: sinh seed ngẫu nhiên, base62 ===== */
+function genSeedBase62(len = 8) {
+  const alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const buf = new Uint8Array(len);
+  crypto.getRandomValues(buf);
+  let out = '';
+  for (let i = 0; i < len; i++) out += alphabet[buf[i] % alphabet.length];
+  return out;
 }
 
-/* ======================= Component ======================= */
 export default function BatchPage() {
-  // Files
+  // Upload cover images
   const [files, setFiles] = React.useState<RowState[]>([]);
   const [uploadKey, setUploadKey] = React.useState(0);
 
   const onChangeCovers = (info: any) => {
+    const seen = new Set<string>();
     const items: RowState[] = [];
     for (const it of info.fileList) {
       const f: File = it.originFileObj || it;
       if (!f || !/image\/(png|jpeg)/.test(f.type)) continue;
+      const key = `${f.name}:${f.size}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       items.push({ file: f, progress: 0, state: 'queued' });
     }
     setFiles(items);
   };
 
-  // Config
-  const [cfg, setCfg] = React.useState<BatchConfig>({
-    method: 'sobel',
-    payloadCap: 60,
-    seed: '',
-    encrypt: true,
-    compress: false
-  });
+  // Secret chung
+  const [secretMode, setSecretMode] = React.useState<SecretMode>('text');
+  const [secretText, setSecretText] = React.useState('');
+  const [secretFile, setSecretFile] = React.useState<File | null>(null);
+
+  // Cấu hình (nếu BE cần sẽ nhận được)
+  const [method, setMethod] = React.useState<Method>('sobel');
+  const [payloadCap, setPayloadCap] = React.useState<number>(60);
+  const [seed, setSeed] = React.useState<string>('');
+  const [encrypt, setEncrypt] = React.useState<boolean>(true);
+  const [compress, setCompress] = React.useState<boolean>(false);
 
   // Run
   const [running, setRunning] = React.useState(false);
   const [overall, setOverall] = React.useState(0);
 
-  const canRun = files.length > 0 && !running;
-
-  const genSeed = () => {
-    const s = Math.random().toString(36).slice(2, 10);
-    setCfg(prev => ({ ...prev, seed: s }));
-  };
+  const canRun = files.length > 0 && !running && (
+    (secretMode==='text' && secretText.trim().length>0) ||
+    (secretMode==='file' && !!secretFile)
+  );
 
   const clearAll = () => {
-    setFiles([]);
-    setOverall(0);
-    setCfg(prev => ({ ...prev, seed: '' }));
-    setUploadKey(k => k+1);
+    setFiles([]); setOverall(0);
+    setSecretText(''); setSecretFile(null);
+    setSeed('');
+    setUploadKey(k=>k+1);
   };
+
+  /* ===== Concurrency + progress batching ===== */
+  const progressRef = React.useRef<number[]>([]);
+  const CONCURRENCY = 3;
+  const TICK_MS = 100;
 
   const runBatch = async () => {
     if (!canRun) return;
-    setRunning(true);
-    setOverall(0);
+    setRunning(true); setOverall(0);
+    progressRef.current = Array(files.length).fill(0);
     setFiles(prev => prev.map(r => ({ ...r, progress: 0, state: 'queued', result: undefined })));
 
-    for (let i=0; i<files.length; i++) {
-      // mark running
+    const tick = window.setInterval(() => {
+      setFiles(prev => prev.map((r, i) => {
+        if (prev[i].state === 'running' || prev[i].state === 'queued') {
+          return { ...r, progress: progressRef.current[i] };
+        }
+        return r;
+      }));
+      const sum = progressRef.current.reduce((a,b)=>a+b,0);
+      setOverall(Math.round(sum / (progressRef.current.length || 1)));
+    }, TICK_MS);
+
+    const worker = async (idx: number) => {
       setFiles(prev => {
         const cp = [...prev];
-        cp[i] = { ...cp[i], state: 'running', progress: 5 };
+        cp[idx] = { ...cp[idx], state: 'running', progress: 5 };
         return cp;
       });
 
       try {
-        // --- Backend thật:
-        // const form = new FormData();
-        // form.append('cover', files[i].file);
-        // Object.entries(cfg).forEach(([k,v])=> form.append(k, String(v)));
-        // const res = await http.post('/api/v1/batch/embed-one', form, {
-        //   onUploadProgress: e => {
-        //     const p = e.total ? Math.round((e.loaded/e.total)*95) : 50;
-        //     setFiles(prev => { const cp=[...prev]; cp[i]={...cp[i], progress:p}; return cp; });
-        //   }
-        // });
-        // const out = res.data.data;
+        const form = new FormData();
+        form.append('coverImage', files[idx].file);
 
-        // Mock:
-        const out = await mockEmbedOne(files[i].file, cfg, (p) =>
-          setFiles(prev => { const cp=[...prev]; cp[i]={...cp[i], progress:p}; return cp; })
-        );
+        // ====== DATA: giống tab Embed (đang chạy OK) ======
+        if (secretMode === 'text') {
+          form.append('secretText', secretText);
+        } else if (secretFile) {
+          // Nếu BE chưa hỗ trợ secret file, fail sớm để hiện lý do
+          throw new Error('Backend /api/v1/embed hiện chỉ nhận secretText (text), chưa hỗ trợ secretFile.');
+        }
 
-        const row: BatchResult = {
-          key: String(i),
-          filename: files[i].file.name,
-          sizeKB: files[i].file.size/1024,
-          payloadKB: out.payloadKB,
-          psnr: out.psnr,
-          ssim: out.ssim,
-          timeMs: out.timeMs,
-          status: toStatusUnion(out.status),
-          message: out.message
+        // ====== OPTIONAL: chỉ gửi khi có, nếu BE hỗ trợ sẽ dùng ======
+        if (seed)        form.append('seed', seed);
+        form.append('policy', method);                          // sobel/laplacian/variance/entropy
+        form.append('payloadCap', String(payloadCap));          // %
+        form.append('encrypt',    String(encrypt));             // 'true' | 'false'
+        form.append('compress',   String(compress));            // 'true' | 'false'
+
+        const res = await http.post('/api/v1/embed', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          onUploadProgress: e => {
+            if (e.total) {
+              const p = Math.min(98, Math.round(e.loaded / e.total * 95));
+              progressRef.current[idx] = p;
+            }
+          }
+        });
+
+        const data = (res.data?.data ?? res.data) as any;
+        const ok   = (res.status >= 200 && res.status < 300) && !!data?.stegoImage;
+
+        const metrics = data?.metrics ?? {};
+        const payloadKB =
+          metrics?.payloadKB ??
+          (typeof metrics?.binary_length_bits === 'number'
+             ? metrics.binary_length_bits / 8 / 1024
+             : 0);
+
+        const row = {
+          key: String(idx),
+          filename: files[idx].file.name,
+          sizeKB: files[idx].file.size / 1024,
+          payloadKB: Number(payloadKB) || 0,
+          psnr:     typeof metrics?.psnr === 'number' ? metrics.psnr : undefined,
+          ssim:     typeof metrics?.ssim === 'number' ? metrics.ssim : undefined,
+          timeMs:   data?.processingTime ?? data?.timeMs,
+          status: ok ? 'OK' as StatusUnion : 'FAIL',
+          message: ok ? undefined : (res.data?.message || res.data?.detail || 'Unknown error')
         };
 
+        progressRef.current[idx] = 100;
         setFiles(prev => {
           const cp = [...prev];
-          cp[i] = { ...cp[i], progress: 100, state: 'done', result: row };
+          cp[idx] = { ...cp[idx], progress: 100, state: ok ? 'done' : 'error', result: row };
           return cp;
         });
+
+        if (!ok) {
+          // eslint-disable-next-line no-console
+          console.warn('[BATCH][FAIL]', row.message, res.data);
+        }
       } catch (err:any) {
-        const row: BatchResult = {
-          key: String(i),
-          filename: files[i].file.name,
-          sizeKB: files[i].file.size/1024,
-          payloadKB: 0,
-          status: 'FAIL',
-          message: err?.message || 'Network error'
-        };
+        progressRef.current[idx] = 100;
+        const msg = err?.response?.data?.detail || err?.message || 'Network error';
         setFiles(prev => {
           const cp=[...prev];
-          cp[i] = { ...cp[i], state: 'error', progress: 100, result: row };
+          cp[idx] = {
+            ...cp[idx],
+            state: 'error',
+            progress: 100,
+            result: {
+              key: String(idx),
+              filename: files[idx].file.name,
+              sizeKB: files[idx].file.size/1024,
+              payloadKB: 0, status: 'FAIL', message: msg
+            }
+          };
           return cp;
         });
+        // eslint-disable-next-line no-console
+        console.error('[BATCH][ERROR]', msg, err?.response?.data || err);
       }
+    };
 
-      setOverall(Math.round(((i+1)/files.length)*100));
-    }
+    // Hàng đợi chạy song song
+    let next = 0;
+    const runners: Promise<void>[] = [];
+    const spawn = () => {
+      if (next >= files.length) return;
+      const idx = next++;
+      runners.push(worker(idx).then(spawn));
+    };
+    for (let i=0;i<Math.min(CONCURRENCY, files.length);i++) spawn();
+    await Promise.all(runners);
 
+    window.clearInterval(tick);
+    setOverall(100);
     setRunning(false);
     message.success('Đã chạy xong lô ảnh');
   };
 
-  // Table
+  // Bảng
   const columns: ColumnsType<RowState> = [
     { title: 'Tên File', key: 'name', render: (_t, r) => r.file.name },
     { title: 'Dữ Liệu', key: 'payload', render: (_t, r) => r.result?.payloadKB?.toFixed(2) ?? '' },
-    { title: 'PSNR', key: 'psnr', render: (_t, r) => r.result?.psnr ? r.result.psnr.toFixed(2) : '' },
-    { title: 'SSIM', key: 'ssim', render: (_t, r) => r.result?.ssim ? r.result.ssim.toFixed(4) : '' },
-    { title: 'Thời Gian', key: 'time', render: (_t, r) => r.result?.timeMs ?? '' },
+    { title: 'PSNR',    key: 'psnr',    render: (_t, r) => r.result?.psnr ? r.result.psnr.toFixed(2) : '' },
+    { title: 'SSIM',    key: 'ssim',    render: (_t, r) => r.result?.ssim ? r.result.ssim.toFixed(4) : '' },
+    { title: 'Thời Gian', key: 'time',  render: (_t, r) => r.result?.timeMs ?? '' },
     {
       title: 'Trạng Thái', key: 'status',
       render: (_t, r) =>
         r.state === 'running' ? <Progress percent={r.progress} size="small" /> :
         r.result ? <Tag color={r.result.status === 'OK' ? 'green' : 'red'}>{r.result.status}</Tag> :
         r.state === 'error' ? <Tag color="red">FAIL</Tag> : <Tag>QUEUED</Tag>
-    }
+    },
+    { title: 'Ghi chú', key: 'note', render: (_t, r) => r.result?.message ?? '' }
   ];
 
-  const resultsOnly: BatchResult[] = files.map(f => f.result).filter(Boolean) as BatchResult[];
+  const resultsOnly = files.map(f => f.result).filter(Boolean) as NonNullable<RowState['result']>[];
 
-  /* ======================= UI ======================= */
   return (
     <div style={{ padding: 16 }}>
-      {/* ===== Cấu Hình Xử Lý Hàng Loạt ===== */}
       <Card title="Cấu Hình Xử Lý Hàng Loạt" style={{ marginBottom: 16 }}>
         <Row gutter={24}>
           {/* Upload */}
@@ -239,6 +275,7 @@ export default function BatchPage() {
               multiple
               directory
               showUploadList
+              accept="image/png,image/jpeg"
               beforeUpload={(f)=> /image\/(png|jpeg)/.test(f.type) || Upload.LIST_IGNORE}
               onChange={onChangeCovers}
               customRequest={({onSuccess})=>{onSuccess && onSuccess('ok')}}
@@ -246,19 +283,19 @@ export default function BatchPage() {
               <div style={{ padding: 18 }}>
                 <p className="ant-upload-drag-icon"><InboxOutlined style={{ fontSize: 44, color:'#1677ff' }}/></p>
                 <p className="ant-upload-text">Click hoặc kéo thả nhiều ảnh để tải lên</p>
-                <p className="ant-upload-hint">Hỗ trợ định dạng PNG, JPG (chọn nhiều)</p>
+                <p className="ant-upload-hint">Hỗ trợ PNG, JPG (chọn nhiều)</p>
               </div>
             </Dragger>
           </Col>
 
-          {/* Config bên phải */}
+          {/* Config + Secret */}
           <Col xs={24} md={10}>
             <Space direction="vertical" size="middle" style={{ width:'100%' }}>
               <div>
                 <div>Phương pháp phức tạp:</div>
                 <Select<Method>
-                  value={cfg.method}
-                  onChange={v=>setCfg({...cfg, method: v})}
+                  value={method}
+                  onChange={setMethod as any}
                   style={{ width: '100%' }}
                   options={[
                     { value:'sobel', label:'Phát Hiện Biên Sobel' },
@@ -271,34 +308,66 @@ export default function BatchPage() {
 
               <div>
                 <div>Dung lượng tối đa (%):</div>
-                <Slider min={10} max={90} step={1}
-                        value={cfg.payloadCap}
-                        onChange={(v)=>setCfg({...cfg, payloadCap: Number(v)})}/>
+                <Slider min={10} max={90} step={1} value={payloadCap} onChange={(v)=>setPayloadCap(Number(v))}/>
               </div>
 
               <div>
                 <div>Hạt giống/PRNG:</div>
                 <Space.Compact style={{ width:'100%' }}>
-                  <Input
-                    placeholder="Nhập hạt giống"
-                    value={cfg.seed}
-                    onChange={e=>setCfg({...cfg, seed: e.target.value})}
-                  />
-                  <Button onClick={genSeed}>Tạo</Button>
+                  <Input placeholder="Nhập hạt giống" value={seed} onChange={e=>setSeed(e.target.value)} />
+                  <Button
+                    onClick={()=>{
+                      const s = genSeedBase62(8);
+                      setSeed(s);
+                      try { navigator.clipboard.writeText(s); } catch {}
+                      message.success(`Đã tạo seed: ${s}`);
+                    }}
+                  >
+                    Tạo
+                  </Button>
                 </Space.Compact>
               </div>
 
               <div>
                 <Space direction="vertical" size={8}>
                   <div>
-                    <Switch checked={cfg.encrypt} onChange={v=>setCfg({...cfg, encrypt:v})}/>
+                    <Switch checked={encrypt}  onChange={setEncrypt}/>
                     <span style={{ marginLeft: 8 }}>Mã hoá (mặc định: BẬT)</span>
                   </div>
                   <div>
-                    <Switch checked={cfg.compress} onChange={v=>setCfg({...cfg, compress:v})}/>
+                    <Switch checked={compress} onChange={setCompress}/>
                     <span style={{ marginLeft: 8 }}>Nén (mặc định: TẮT)</span>
                   </div>
                 </Space>
+              </div>
+
+              <div>
+                <div>Dữ liệu giấu dùng chung:</div>
+                <Radio.Group value={secretMode} onChange={e=>setSecretMode(e.target.value)} style={{ marginBottom:8 }}>
+                  <Radio.Button value="text">Text</Radio.Button>
+                  <Radio.Button value="file">File</Radio.Button>
+                </Radio.Group>
+                {secretMode === 'text' ? (
+                  <Input.TextArea
+                    value={secretText}
+                    onChange={e=>setSecretText(e.target.value)}
+                    rows={3}
+                    placeholder="Nhập text dùng chung cho toàn bộ ảnh"
+                    showCount maxLength={2000}
+                  />
+                ) : (
+                  <Upload
+                    accept="*"
+                    maxCount={1}
+                    beforeUpload={(f)=>{ setSecretFile(f); return Upload.LIST_IGNORE; }}
+                    onRemove={()=>{ setSecretFile(null); return true; }}
+                  >
+                    <Button>Chọn file bí mật</Button>
+                  </Upload>
+                )}
+                <Paragraph type="secondary" style={{ marginTop:6 }}>
+                  Nếu backend chưa hỗ trợ file bí mật, hãy dùng chế độ <b>Text</b>.
+                </Paragraph>
               </div>
 
               <Space>
@@ -316,8 +385,11 @@ export default function BatchPage() {
                 </Button>
                 <Button
                   icon={<DownloadOutlined />}
-                  onClick={()=>exportCsv(resultsOnly)}
-                  disabled={resultsOnly.length===0}
+                  onClick={()=>{
+                    const resultsOnly = files.map(f => f.result).filter(Boolean) as NonNullable<RowState['result']>[];
+                    exportCsv(resultsOnly);
+                  }}
+                  disabled={files.every(f=>!f.result)}
                 >
                   Xuất CSV
                 </Button>
@@ -339,15 +411,34 @@ export default function BatchPage() {
           size="small"
           pagination={{ pageSize: 8 }}
           dataSource={files}
-          columns={columns}
+          columns={[
+            ...columnsBase,
+            { title: 'Ghi chú', key: 'note', render: (_t, r) => r.result?.message ?? '' }
+          ]}
           rowKey={(_,i)=>String(i)}
           locale={{ emptyText: 'Chưa có file nào được tải lên' }}
         />
         <Divider style={{ marginTop: 8 }} />
         <Text type="secondary">
-          {resultsOnly.length} kết quả đã hoàn tất / {files.length} tệp
+          {files.filter(f=>f.result).length} kết quả đã hoàn tất / {files.length} tệp
         </Text>
       </Card>
     </div>
   );
 }
+
+/* tách columnsBase cho gọn */
+const columnsBase: ColumnsType<RowState> = [
+  { title: 'Tên File', key: 'name', render: (_t, r) => r.file.name },
+  { title: 'Dữ Liệu', key: 'payload', render: (_t, r) => r.result?.payloadKB?.toFixed(2) ?? '' },
+  { title: 'PSNR',    key: 'psnr',    render: (_t, r) => r.result?.psnr ? r.result.psnr.toFixed(2) : '' },
+  { title: 'SSIM',    key: 'ssim',    render: (_t, r) => r.result?.ssim ? r.result.ssim.toFixed(4) : '' },
+  { title: 'Thời Gian', key: 'time',  render: (_t, r) => r.result?.timeMs ?? '' },
+  {
+    title: 'Trạng Thái', key: 'status',
+    render: (_t, r) =>
+      r.state === 'running' ? <Progress percent={r.progress} size="small" /> :
+      r.result ? <Tag color={r.result.status === 'OK' ? 'green' : 'red'}>{r.result.status}</Tag> :
+      r.state === 'error' ? <Tag color="red">FAIL</Tag> : <Tag>QUEUED</Tag>
+  }
+];
