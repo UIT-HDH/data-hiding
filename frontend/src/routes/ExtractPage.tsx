@@ -1,351 +1,230 @@
-import React from 'react'
+import React from 'react';
 import {
-  Row, Col, Card, Upload, Button, Input, message, Typography, Image,
-  Space, Alert, Divider, Statistic, Progress, Tag, Tooltip, Select
-} from 'antd'
+  Row, Col, Card, Upload, Button, Input, Typography, Space,
+  Alert, Image, message, Progress, Select, Divider
+} from 'antd';
 import {
-  InboxOutlined, PlayCircleOutlined, CopyOutlined, DownloadOutlined,
-  ReloadOutlined, LockOutlined, BranchesOutlined
-} from '@ant-design/icons'
-import { http } from '../services/http'
+  InboxOutlined, PlayCircleOutlined, CopyOutlined, DownloadOutlined
+} from '@ant-design/icons';
+import { http } from '../services/http';
 
-const { Dragger } = Upload
-const { TextArea } = Input
-const { Text, Title } = Typography
+const { Dragger } = Upload;
+const { TextArea } = Input;
+const { Text, Title } = Typography;
 
-/* ====================== Types từ backend (đề xuất) ====================== */
-type Domain = 'spatial' | 'dct'
-type Policy = 'adaptive-lsb-1-2' | 'fixed-lsb-1' | 'fixed-lsb-2'
+type Domain = 'spatial' | 'dct';
+type Policy = 'sobel' | 'laplacian' | 'variance' | 'entropy';
 
-interface ExtractParams {
-  password?: string
-  seed?: string
-  domain: Domain
-  policy: Policy
-}
+type ExtractResponse = {
+  success?: boolean;
+  message?: string;
+  data?: {
+    secretType?: 'text' | 'file';
+    text?: string;
+    filename?: string;
+    size?: number;
+    fileBase64?: string;          // "data:...;base64,...." hoặc chỉ base64
+    crc_ok?: boolean;
+    processingTime?: number;
+  };
+};
 
-interface ExtractResultText {
-  kind: 'text'
-  text: string
-  integrity: 'ok' | 'fail'
-  crc?: string
-  tookMs: number
-  metrics?: { psnr?: number; ssim?: number }
-}
+export default function ExtractPage() {
+  const [stegoFile, setStegoFile] = React.useState<File | null>(null);
+  const [stegoPreview, setStegoPreview] = React.useState<string>('');
 
-interface ExtractResultFile {
-  kind: 'file'
-  filename: string
-  size: number
-  fileBase64: string           // base64 (không có prefix data:)
-  mime?: string                // ví dụ application/octet-stream
-  integrity: 'ok' | 'fail'
-  crc?: string
-  tookMs: number
-  metrics?: { psnr?: number; ssim?: number }
-}
+  const [seed, setSeed] = React.useState<string>('');
+  const [domain, setDomain] = React.useState<Domain>('spatial');
+  const [policy, setPolicy] = React.useState<Policy>('sobel');
 
-type ExtractResult = ExtractResultText | ExtractResultFile
+  const [loading, setLoading] = React.useState(false);
+  const [progress, setProgress] = React.useState(0);
 
-/* ====================== Trang GIẢI MÃ ====================== */
-export default function ExtractPageEnhanced() {
-  // Upload & preview
-  const [stegoFile, setStegoFile] = React.useState<File | null>(null)
-  const [stegoPreview, setStegoPreview] = React.useState<string>('')
-  const [uploadKey, setUploadKey] = React.useState(0)
+  const [result, setResult] = React.useState<ExtractResponse['data'] | null>(null);
 
-  // Params
-  const [password, setPassword] = React.useState<string>('')
-  const [seed, setSeed] = React.useState<string>('')
-  const [domain, setDomain] = React.useState<Domain>('spatial')
-  const [policy, setPolicy] = React.useState<Policy>('adaptive-lsb-1-2')
-
-  // Extract state
-  const [isProcessing, setIsProcessing] = React.useState<boolean>(false)
-  const [progress, setProgress] = React.useState<number>(0)
-  const [result, setResult] = React.useState<ExtractResult | null>(null)
-
-  /* -------------------- Upload handlers -------------------- */
   const beforeUpload = (f: File) => {
-    const ok = ['image/png', 'image/jpeg'].includes(f.type)
-    if (!ok) message.error('Chỉ hỗ trợ PNG/JPG')
-    return ok || Upload.LIST_IGNORE
-  }
+    const ok = ['image/png', 'image/jpeg'].includes(f.type);
+    if (!ok) message.error('Chỉ hỗ trợ ảnh PNG/JPG');
+    return ok || Upload.LIST_IGNORE;
+  };
+  const onChangeUpload = (info: any) => {
+    const f: File = info.file.originFileObj || info.file;
+    if (!f) return;
+    setStegoFile(f);
+    const reader = new FileReader();
+    reader.onload = e => setStegoPreview(String(e.target?.result || ''));
+    reader.readAsDataURL(f);
+    setResult(null);
+  };
 
-  const handleStegoUpload = (info: any) => {
-    const { file } = info
-    if (file.status !== 'uploading') {
-      const f: File = file.originFileObj || file
-      setStegoFile(f)
-      const reader = new FileReader()
-      reader.onload = e => setStegoPreview(e.target?.result as string)
-      reader.readAsDataURL(f)
-    }
-  }
+  const copyText = async (txt: string) => {
+    await navigator.clipboard.writeText(txt);
+    message.success('Đã copy nội dung');
+  };
 
-  const resetAll = () => {
-    setStegoFile(null)
-    setStegoPreview('')
-    setResult(null)
-    setProgress(0)
-    setUploadKey(k => k + 1)
-  }
-
-  /* -------------------- Extract action -------------------- */
-  const canExtract = stegoFile && !isProcessing
+  const downloadSecretFile = (base64: string, filename = 'secret.bin') => {
+    const hasPrefix = /^data:/.test(base64);
+    const url = hasPrefix ? base64 : `data:application/octet-stream;base64,${base64}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+  };
 
   const doExtract = async () => {
-    if (!canExtract) return
-    setIsProcessing(true)
-    setProgress(10)
-    setResult(null)
-
+    if (!stegoFile) return message.warning('Hãy chọn ảnh stego');
+    setLoading(true);
+    setProgress(0);
+    setResult(null);
     try {
-      const form = new FormData()
-      form.append('stegoImage', stegoFile!)
-      form.append('password', password)
-      form.append('seed', seed)
-      form.append('domain', domain)
-      form.append('policy', policy)
+      const fd = new FormData();
+      fd.append('stegoImage', stegoFile);
+      // tuỳ backend có nhận thêm tham số:
+      fd.append('seed', seed);
+      fd.append('domain', domain);
+      fd.append('policy', policy);
 
-      // NOTE: Nếu backend có progress (SSE/WS) thì thay bằng đó.
-      // Ở đây: animate nhẹ đến 90% trong lúc chờ.
-      const tick = setInterval(() => {
-        setProgress(p => (p < 90 ? p + 3 : p))
-      }, 120)
+      const res = await http.post<ExtractResponse>('/api/v1/extract', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: e => {
+          if (e.total) setProgress(Math.min(95, Math.round(e.loaded / e.total * 95)));
+        }
+      });
 
-      const res = await http.post('/api/v1/extract', form, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
+      const ok = res.data?.success !== false;
+      const data = res.data?.data ?? (res.data as any);
 
-      clearInterval(tick)
-      setProgress(100)
-
-      if (!res.data?.success) {
-        throw new Error(res.data?.message || 'Extract failed')
-      }
-
-      const data = res.data.data as ExtractResult
-      setResult(data)
-
-      if (data.integrity === 'fail') {
-        message.warning('CRC/Integrity FAIL — có thể password/seed/policy sai hoặc ảnh không chứa dữ liệu.')
+      setProgress(100);
+      setResult(data);
+      if (!ok) {
+        message.error(res.data?.message || 'Giải mã thất bại');
       } else {
-        message.success('✅ Giải mã thành công')
+        message.success('Giải mã thành công');
       }
     } catch (err: any) {
-      console.error(err)
-      const msg = err.response?.data?.detail || err.message || 'Network error'
-      message.error(`❌ ${msg}`)
+      console.error(err);
+      message.error(err?.response?.data?.detail || err.message || 'Lỗi mạng');
     } finally {
-      setIsProcessing(false)
+      setLoading(false);
     }
-  }
+  };
 
-  /* -------------------- Helpers -------------------- */
-  const copyText = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); message.success('Đã copy') }
-    catch { message.error('Copy thất bại') }
-  }
-
-  const downloadBase64 = (b64: string, filename: string, mime = 'application/octet-stream') => {
-    try {
-      const byteArray = Uint8Array.from(atob(b64), c => c.charCodeAt(0))
-      const blob = new Blob([byteArray], { type: mime })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = filename; a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      message.error('Download thất bại')
-    }
-  }
-
-  /* -------------------- UI -------------------- */
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <Title level={2}>🔓 Giải mã</Title>
+    <div style={{ padding: 20, maxWidth: 1200, margin: '0 auto' }}>
+      <Title level={2}>🔓 Giải</Title>
 
-      <Alert
-        type="info"
-        showIcon
-        message="Extract hidden data from stego image"
-        description="Nhập đúng password/seed và chọn domain/policy để giải mã. Hệ thống hiển thị CRC/Integrity để kiểm chứng tính toàn vẹn."
-        style={{ marginBottom: 20 }}
-      />
-
-      <Row gutter={[24, 24]}>
-        {/* ===== LEFT: Upload + Params + Extract ===== */}
-        <Col span={24} lg={12}>
+      <Row gutter={[24,24]}>
+        {/* Upload + cấu hình */}
+        <Col xs={24} lg={12}>
           <Space direction="vertical" size="large" style={{ width: '100%' }}>
-            {/* Upload Stego */}
-            <Card title="🖼️ Upload Stego" size="small">
+            <Card title="🖼️ Tải Ảnh Stego" size="small">
               <Dragger
-                key={uploadKey}
-                accept="image/*"
-                showUploadList={false}
+                accept="image/png,image/jpeg"
                 beforeUpload={beforeUpload}
-                customRequest={({ file, onSuccess }) => { onSuccess && onSuccess('ok') }}
-                onChange={handleStegoUpload}
+                showUploadList={false}
+                customRequest={({ onSuccess }) => { onSuccess && onSuccess('ok'); }}
+                onChange={onChangeUpload}
               >
                 {stegoPreview ? (
-                  <Image
-                    src={stegoPreview}
-                    alt="Stego preview"
-                    style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
-                  />
+                  <Image src={stegoPreview} alt="stego" style={{ maxWidth: '100%', maxHeight: 240, objectFit: 'contain' }}/>
                 ) : (
                   <div style={{ padding: 20 }}>
-                    <p className="ant-upload-drag-icon">
-                      <InboxOutlined style={{ fontSize: 48, color: '#1890ff' }} />
-                    </p>
-                    <p className="ant-upload-text">Click hoặc kéo thả ảnh stego để tải lên</p>
-                    <p className="ant-upload-hint">Hỗ trợ PNG, JPG</p>
+                    <p className="ant-upload-drag-icon"><InboxOutlined style={{ fontSize: 48, color:'#1677ff' }}/></p>
+                    <p className="ant-upload-text">Click hoặc kéo thả ảnh để tải lên</p>
+                    <p className="ant-upload-hint">Hỗ trợ PNG/JPG</p>
                   </div>
                 )}
               </Dragger>
             </Card>
 
-            {/* Params */}
-            <Card title="🔑 Tham số giải mã" size="small">
-              <Space direction="vertical" style={{ width: '100%' }} size="middle">
-                <Space wrap>
-                  <Input.Password
-                    prefix={<LockOutlined />}
-                    placeholder="Password (nếu có)"
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    style={{ width: 260 }}
-                  />
-                  <Input
-                    prefix={<BranchesOutlined />}
-                    placeholder="Seed / PRNG (nếu có)"
-                    value={seed}
-                    onChange={e => setSeed(e.target.value)}
-                    style={{ width: 220 }}
-                  />
-                </Space>
+            <Card title="⚙️ Tham số giải mã" size="small">
+              <Space direction="vertical" style={{ width:'100%' }} size="middle">
+                <Input placeholder="Password / Seed (nếu có)" value={seed} onChange={e=>setSeed(e.target.value)} />
+                <Row gutter={12}>
+                  <Col span={12}>
+                    <div>Miền (Domain):</div>
+                    <Select value={domain} onChange={v=>setDomain(v)} style={{ width:'100%' }}
+                      options={[
+                        {value:'spatial', label:'Spatial'},
+                        {value:'dct', label:'DCT'}
+                      ]}/>
+                  </Col>
+                  <Col span={12}>
+                    <div>Chính sách (Policy):</div>
+                    <Select value={policy} onChange={v=>setPolicy(v)} style={{ width:'100%' }}
+                      options={[
+                        {value:'sobel', label:'Sobel'},
+                        {value:'laplacian', label:'Laplacian'},
+                        {value:'variance', label:'Variance'},
+                        {value:'entropy', label:'Entropy'}
+                      ]}/>
+                  </Col>
+                </Row>
 
-                <Space wrap>
-                  <Select<Domain>
-                    value={domain}
-                    onChange={setDomain}
-                    style={{ width: 180 }}
-                    options={[
-                      { value: 'spatial', label: 'Spatial domain' },
-                      { value: 'dct', label: 'DCT domain' }
-                    ]}
-                  />
-                  <Select<Policy>
-                    value={policy}
-                    onChange={setPolicy}
-                    style={{ width: 220 }}
-                    options={[
-                      { value: 'adaptive-lsb-1-2', label: 'Adaptive LSB (1–2 bit)' },
-                      { value: 'fixed-lsb-1', label: 'Fixed LSB 1-bit' },
-                      { value: 'fixed-lsb-2', label: 'Fixed LSB 2-bit' }
-                    ]}
-                  />
-                </Space>
-
-                <Space>
-                  <Button
-                    type="primary"
-                    icon={<PlayCircleOutlined />}
-                    onClick={doExtract}
-                    disabled={!canExtract}
-                    loading={isProcessing}
-                  >
-                    Extract
-                  </Button>
-                  <Button icon={<ReloadOutlined />} onClick={resetAll}>
-                    Làm Mới
-                  </Button>
-                </Space>
-
-                {(isProcessing || progress > 0) && (
-                  <div style={{ width: 320 }}>
-                    <Text type="secondary">Tiến độ:</Text>
-                    <Progress percent={progress} size="small" status={isProcessing ? 'active' : 'normal'} />
-                  </div>
-                )}
+                <Button type="primary" icon={<PlayCircleOutlined />} onClick={doExtract} disabled={!stegoFile} loading={loading}>
+                  Extract
+                </Button>
+                {loading && <Progress percent={progress} />}
               </Space>
             </Card>
           </Space>
         </Col>
 
-        {/* ===== RIGHT: Kết quả ===== */}
-        <Col span={24} lg={12}>
-          <Card title="🧾 Kết quả giải mã" size="small">
-            {/* Preview ảnh */}
-            <Text type="secondary">Ảnh stego:</Text>
-            <div
-              style={{
-                border: '1px solid #eee', borderRadius: 8, marginTop: 8, marginBottom: 12,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                minHeight: 220, background: '#fff'
-              }}
-            >
-              {stegoPreview
-                ? <img src={stegoPreview} style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }} />
-                : <Text type="secondary">Chưa có ảnh — tải ở khung bên trái.</Text>}
-            </div>
-
-            {/* Result area */}
+        {/* Kết quả */}
+        <Col xs={24} lg={12}>
+          <Card title="📤 Kết Quả Giải Mã" size="small">
             {!result ? (
-              <Text type="secondary">Chưa có kết quả. Tải ảnh stego và nhấn “Extract”.</Text>
-            ) : result.kind === 'text' ? (
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <Space>
-                  <Text strong>Chuỗi bí mật:</Text>
-                  <Tag color={result.integrity === 'ok' ? 'green' : 'red'}>
-                    {result.integrity === 'ok' ? 'CRC OK' : 'CRC FAIL'}
-                  </Tag>
-                  {result.crc && (
-                    <Tooltip title="CRC / Hash"><Tag>{result.crc}</Tag></Tooltip>
-                  )}
-                </Space>
-                <TextArea value={result.text} readOnly rows={4} />
-                <Space>
-                  <Button icon={<CopyOutlined />} onClick={() => copyText(result.text)}>Copy</Button>
-                  <Text type="secondary">Thời gian xử lý: {(result.tookMs/1000).toFixed(2)}s</Text>
-                </Space>
-              </Space>
+              <div style={{ padding: 40, textAlign:'center' }}>
+                <Text type="secondary">Tải ảnh và bấm Extract để bắt đầu</Text>
+              </div>
             ) : (
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <Space>
-                  <Text strong>Tệp bí mật:</Text>
-                  <Tag color={result.integrity === 'ok' ? 'green' : 'red'}>
-                    {result.integrity === 'ok' ? 'CRC OK' : 'CRC FAIL'}
-                  </Tag>
-                  {result.crc && <Tag>{result.crc}</Tag>}
-                </Space>
-                <Text>Tên: <b>{result.filename}</b> — Kích thước: <b>{(result.size/1024).toFixed(1)} KB</b></Text>
-                <Space>
-                  <Button
-                    type="primary"
-                    icon={<DownloadOutlined />}
-                    onClick={() => downloadBase64(result.fileBase64, result.filename, result.mime)}
-                  >
-                    Download
-                  </Button>
-                  <Text type="secondary">Thời gian xử lý: {(result.tookMs/1000).toFixed(2)}s</Text>
-                </Space>
+              <Space direction="vertical" style={{ width:'100%' }} size="large">
+                {/* Integrity / CRC */}
+                {'crc_ok' in result && (
+                  result.crc_ok
+                    ? <Alert type="success" showIcon message="CRC / Integrity: OK" />
+                    : <Alert type="error" showIcon message="CRC / Integrity: FAILED" />
+                )}
+
+                {/* Text */}
+                {result.secretType === 'text' && (
+                  <div>
+                    <Text strong>Nội dung bí mật:</Text>
+                    <Space.Compact style={{ width:'100%', marginTop:8 }}>
+                      <TextArea readOnly value={result.text || ''} rows={5}/>
+                      <Button icon={<CopyOutlined />} onClick={()=>copyText(result.text || '')}>Copy</Button>
+                    </Space.Compact>
+                  </div>
+                )}
+
+                {/* File */}
+                {result.secretType === 'file' && (
+                  <div>
+                    <Text strong>File bí mật:</Text>
+                    <div style={{ marginTop:6 }}>
+                      <Text type="secondary">{result.filename || 'secret.bin'} • {(result.size ?? 0)} bytes</Text>
+                    </div>
+                    <Button
+                      icon={<DownloadOutlined />}
+                      onClick={()=>downloadSecretFile(result.fileBase64 || '', result.filename || 'secret.bin')}
+                      style={{ marginTop:8 }}
+                    >
+                      Download
+                    </Button>
+                  </div>
+                )}
+
+                {typeof result.processingTime === 'number' && (
+                  <>
+                    <Divider style={{ margin:'8px 0' }}/>
+                    <Text type="secondary">Thời gian xử lý: {result.processingTime}s</Text>
+                  </>
+                )}
               </Space>
             )}
           </Card>
-
-          {/* Optional: show metrics nếu backend trả */}
-          {result?.metrics && (
-            <Card title="📊 Quality Metrics" size="small" style={{ marginTop: 16 }}>
-              <Row gutter={16}>
-                <Col span={12}><Statistic title="PSNR" value={result.metrics.psnr} precision={2} suffix="dB" /></Col>
-                <Col span={12}><Statistic title="SSIM" value={result.metrics.ssim} precision={4} /></Col>
-              </Row>
-            </Card>
-          )}
         </Col>
       </Row>
     </div>
-  )
+  );
 }
