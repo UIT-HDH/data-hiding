@@ -1,8 +1,10 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import {
-  Card, Col, Row, Upload, Button, Switch, Typography, Slider, Statistic, Tabs, message, Popconfirm
+  Card, Col, Row, Upload, Button, Switch, Typography, Slider, Statistic, Tabs, message, Space, Tooltip
 } from 'antd';
-import { InboxOutlined, ReloadOutlined, EyeOutlined, DeleteOutlined } from '@ant-design/icons';
+import {
+  InboxOutlined, ReloadOutlined, EyeOutlined, DeleteOutlined
+} from '@ant-design/icons';
 
 const { Dragger } = Upload;
 
@@ -81,7 +83,6 @@ export default function AnalysisPage() {
   // upload + preview gốc
   const [file, setFile] = useState<File | null>(null);
   const [originUrl, setOriginUrl] = useState<string | null>(null);
-  const [uploadKey, setUploadKey] = useState(0); // reset Dragger khi xóa ảnh
 
   // maps + normalize
   const [maps, setMaps] = useState<{
@@ -90,7 +91,7 @@ export default function AnalysisPage() {
   } | null>(null);
   const [normalize, setNormalize] = useState(true);
 
-  // curve editor (KHAI BÁO TRƯỚC để ref/state khác dùng)
+  // curve editor
   const [curvePoints, setCurvePoints] = useState<Array<{x:number;y:number}>>([
     { x: 0,   y: 0.1 },
     { x: 0.5, y: 0.6 },
@@ -98,24 +99,8 @@ export default function AnalysisPage() {
   ]);
   const [curveMethod, setCurveMethod] =
     useState<'sobel'|'laplacian'|'variance'|'entropy'>('sobel');
-  const [bppThreshold, setBppThreshold] = useState<number>(8); // slider 1..8
+  const [bppThreshold, setBppThreshold] = useState<number>(8); // 1..8
   const svgRef = useRef<SVGSVGElement>(null);
-
-  // Throttle & debounce cho Curve Editor
-  const pointsRef = useRef(curvePoints);
-  const [debouncedPoints, setDebouncedPoints] = useState(curvePoints);
-  const rafRef = useRef<number | null>(null);
-
-  // Đồng bộ ref khi curvePoints đổi
-  useEffect(() => { pointsRef.current = curvePoints; }, [curvePoints]);
-
-  // Debounce 80ms để giảm tính toán preview
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      setDebouncedPoints(pointsRef.current);
-    }, 80);
-    return () => window.clearTimeout(id);
-  }, [curvePoints]);
 
   // compare
   const [payloadCap, setPayloadCap] = useState(60);
@@ -125,10 +110,10 @@ export default function AnalysisPage() {
   const [loadingAnalyze, setLoadingAnalyze] = useState(false);
   const [loadingCmp, setLoadingCmp] = useState(false);
 
-  /* ---------- actions ---------- */
+  /* ---------- Upload: chỉ cho phép ảnh ---------- */
   const beforeUpload = (f: File) => {
     const ok = ['image/png','image/jpeg'].includes(f.type);
-    if (!ok) message.error('Chỉ hỗ trợ PNG/JPG');
+    if (!ok) message.error('Chỉ hỗ trợ file ảnh PNG hoặc JPG');
     return ok || Upload.LIST_IGNORE;
   };
   const onCustomUpload = async ({ file, onSuccess }: any) => {
@@ -138,6 +123,8 @@ export default function AnalysisPage() {
     // Không auto-analyze: người dùng chủ động nhấn nút
     onSuccess && onSuccess({}, new XMLHttpRequest());
   };
+
+  /* ---------- actions ---------- */
   const runAnalyze = async () => {
     if (!file) return message.warning('Hãy chọn ảnh trước');
     setLoadingAnalyze(true);
@@ -153,13 +140,10 @@ export default function AnalysisPage() {
     message.success('Đã làm mới kết quả phân tích');
   };
   const removeImage = () => {
-    if (originUrl) URL.revokeObjectURL(originUrl);
     setFile(null);
+    if (originUrl) URL.revokeObjectURL(originUrl);
     setOriginUrl(null);
-    setMaps(null);
-    setCmp(null);
-    setUploadKey(k => k + 1); // remount Dragger để clear file đã chọn
-    message.success('Đã xóa ảnh đã tải lên');
+    resetAll();
   };
   const runCompare = async () => {
     if (!file) return message.warning('Hãy chọn ảnh trước');
@@ -178,14 +162,8 @@ export default function AnalysisPage() {
         ? normalizeToUint8(arr)
         : new Uint8ClampedArray(arr.map(v => Math.max(0, Math.min(1, v))*255));
       const url = grayscaleToDataUrl(data, maps.width, maps.height);
-      // Thu nhỏ ảnh trong tabs
-      return (
-        <img
-          src={url}
-          alt={name}
-          style={{ width:'100%', maxHeight:320, objectFit:'contain', borderRadius:8 }}
-        />
-      );
+      // ảnh xem vừa phải
+      return <img src={url} alt={name} style={{ width:'100%', maxHeight:360, objectFit:'contain', borderRadius:8 }}/>;
     };
     return (
       <Tabs
@@ -215,70 +193,69 @@ export default function AnalysisPage() {
     if (!maps) return null;
     const arr = maps.maps[curveMethod];
     const bppNorm = arr.map(c =>
-      piecewiseLinearMap(Math.max(0, Math.min(1, c)), debouncedPoints)
+      piecewiseLinearMap(Math.max(0, Math.min(1, c)), curvePoints)
     );
     const bppMax = Math.max(1, Math.min(8, bppThreshold));
-    const bppBits = bppNorm.map(v => v * 8);   // 0..8
+    const bppBits = bppNorm.map(v => v * 8);
     const capped  = bppBits.map(v => Math.min(v, bppMax));
     const view01 = capped.map(v => v / bppMax);
     const u8 = normalizeToUint8(view01);
     return grayscaleToDataUrl(u8, maps.width, maps.height);
-  }, [maps, curveMethod, debouncedPoints, bppThreshold]);
+  }, [maps, curveMethod, curvePoints, bppThreshold]);
 
-  const onDrag = (idx:number)=>{
-    const svg = svgRef.current!;
-    const rect = svg.getBoundingClientRect();
-
+  // cải thiện kéo mượt hơn một chút
+  const dragActiveRef = useRef(false);
+  useEffect(() => {
     const move = (ev: MouseEvent) => {
+      if (!dragActiveRef.current || !svgRef.current) return;
+      const rect = svgRef.current.getBoundingClientRect();
       const x = (ev.clientX - rect.left - PAD) / (W - 2*PAD);
       const y = 1 - (ev.clientY - rect.top - PAD) / (H - 2*PAD);
       const nx = Math.min(1, Math.max(0, x));
       const ny = Math.min(1, Math.max(0, y));
-
-      // cập nhật vào ref (không setState liên tục)
-      const next = [...pointsRef.current];
-      next[idx] = { x: nx, y: ny };
-      pointsRef.current = next;
-
-      // rAF: tối đa ~60fps mới setState 1 lần
-      if (rafRef.current == null) {
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = null;
-          setCurvePoints(pointsRef.current);
-        });
-      }
+      setCurvePoints(prev => {
+        const cp = [...prev];
+        // điểm gần nhất
+        let idx = 0, best = 1e9;
+        for (let i=0;i<cp.length;i++){
+          const cx = PAD + cp[i].x*(W-2*PAD);
+          const cy = H - PAD - cp[i].y*(H-2*PAD);
+          const d = (cx-(ev.clientX-rect.left))**2 + (cy-(ev.clientY-rect.top))**2;
+          if (d<best){best=d; idx=i;}
+        }
+        cp[idx] = { x:nx, y:ny };
+        return cp;
+      });
     };
-
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      // chốt lại ngay để preview cập nhật
-      setCurvePoints(pointsRef.current);
-      setDebouncedPoints(pointsRef.current);
-    };
-
+    const up = () => { dragActiveRef.current = false; };
     window.addEventListener('mousemove', move);
     window.addEventListener('mouseup', up);
-  };
+    return () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+  }, []);
+
+  const startDrag = () => { dragActiveRef.current = true; };
 
   return (
     <Row gutter={[12,12]}>
       {/* ===== Tải lên ảnh & ảnh gốc bên phải ===== */}
       <Col span={24}>
         <Card title="Tải Lên Ảnh Phân Tích">
-          <Row gutter={16}>
+          <Row gutter={16} align="top">
             <Col xs={24} md={16}>
               <Dragger
-                key={uploadKey}
+                accept="image/png,image/jpeg"
                 multiple={false}
                 maxCount={1}
                 beforeUpload={beforeUpload}
                 customRequest={onCustomUpload}
-                showUploadList={false} // ẩn danh sách file mặc định để tránh chồng nút
+                showUploadList={false}
               >
                 <p className="ant-upload-drag-icon"><InboxOutlined /></p>
                 <p className="ant-upload-text">Click hoặc kéo thả ảnh để tải lên</p>
-                <p className="ant-upload-hint">Hỗ trợ PNG/JPG để phân tích độ phức tạp</p>
+                <p className="ant-upload-hint">Hỗ trợ PNG, JPG để phân tích độ phức tạp</p>
               </Dragger>
 
               {/* --- Thanh nút ngay dưới Dragger --- */}
@@ -292,28 +269,12 @@ export default function AnalysisPage() {
                 >
                   Phân Tích
                 </Button>
-
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={resetAll}
-                  disabled={!file}
-                >
+                <Button icon={<ReloadOutlined />} onClick={resetAll} disabled={!file}>
                   Làm Mới
                 </Button>
-
-                <Popconfirm
-                  title="Xóa ảnh đã tải lên?"
-                  description="Thao tác này sẽ xóa ảnh và các kết quả phân tích/so sánh."
-                  okText="Xóa"
-                  cancelText="Hủy"
-                  onConfirm={removeImage}
-                  disabled={!file}
-                >
-                  <Button danger icon={<DeleteOutlined />} disabled={!file}>
-                    Xóa ảnh
-                  </Button>
-                </Popconfirm>
-
+                <Tooltip title="Xoá ảnh đã chọn">
+                  <Button danger icon={<DeleteOutlined />} onClick={removeImage} disabled={!file}/>
+                </Tooltip>
                 <span style={{ marginLeft: 12 }}>Normalize</span>
                 <Switch checked={normalize} onChange={setNormalize}/>
               </div>
@@ -327,7 +288,7 @@ export default function AnalysisPage() {
                 minHeight:240, background:'#fff'
               }}>
                 {originUrl
-                  ? <img src={originUrl} style={{ maxWidth:'100%', maxHeight:240, objectFit:'contain' }}/>
+                  ? <img src={originUrl} style={{ maxWidth:'100%', maxHeight:240, objectFit:'contain' }} />
                   : <Typography.Text type="secondary">Chưa có ảnh</Typography.Text>}
               </div>
             </Col>
@@ -335,7 +296,7 @@ export default function AnalysisPage() {
         </Card>
       </Col>
 
-      {/* ===== Bản đồ độ phức tạp (Tabs theo đúng nhãn VN) ===== */}
+      {/* ===== Bản đồ độ phức tạp ===== */}
       <Col span={24}>
         <Card title="Bản Đồ Độ Phức Tạp">
           {!maps
@@ -353,12 +314,8 @@ export default function AnalysisPage() {
             <div style={{ display:'flex', gap:16, alignItems:'center', flexWrap:'wrap', marginBottom:8 }}>
               <div style={{ minWidth:240 }}>
                 <Typography.Text type="secondary">Ngưỡng BPP:</Typography.Text>
-                <Slider
-                  min={1} max={8} step={1}
-                  value={bppThreshold}
-                  onChange={setBppThreshold}
-                  marks={{1:'1',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8'}}
-                />
+                <Slider min={1} max={8} step={1} value={bppThreshold} onChange={setBppThreshold}
+                        marks={{1:'1',2:'2',3:'3',4:'4',5:'5',6:'6',7:'7',8:'8'}} />
                 <Typography.Text type="secondary">Ngưỡng hiện tại: <b>{bppThreshold} bpp</b></Typography.Text>
               </div>
 
@@ -373,12 +330,13 @@ export default function AnalysisPage() {
               </div>
 
               <svg ref={svgRef} width={W} height={H}
-                   style={{ background:'#fafafa', borderRadius:8, boxShadow:'inset 0 0 0 1px #eee' }}>
+                   style={{ background:'#fafafa', borderRadius:8, boxShadow:'inset 0 0 0 1px #eee', cursor:'grab' }}
+                   onMouseDown={startDrag}>
                 <path d={curvePath} stroke="#1677ff" fill="none" strokeWidth={2}/>
                 {[...curvePoints].sort((a,b)=>a.x-b.x).map((p, i) => {
                   const x = PAD + p.x*(W-2*PAD);
                   const y = H - PAD - p.y*(H-2*PAD);
-                  return <circle key={i} cx={x} cy={y} r={R} fill="#1677ff" onMouseDown={()=>onDrag(i)}/>
+                  return <circle key={i} cx={x} cy={y} r={R} fill="#1677ff" onMouseDown={startDrag}/>;
                 })}
                 <line x1={PAD} y1={H-PAD} x2={W-PAD} y2={H-PAD} stroke="#999" />
                 <line x1={PAD} y1={PAD}   x2={PAD}   y2={H-PAD} stroke="#999" />
